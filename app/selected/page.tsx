@@ -1,19 +1,28 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { getAllProjects } from "@/lib/data/projects";
+import { SelectedExplorer } from "@/components/selected/selected-explorer";
 
 export const metadata = { title: "TOR + SOW · คลองหลวง 2026" };
 
-export default function Page() {
+export default function SelectedPage() {
+  const projects = getAllProjects();
+
   return (
-    <PlaceholderPage
-      n="6"
-      title="โครงการที่เลือก พร้อม TOR เทียบ + ร่าง SOW"
-      description="แต่ละโครงการ — แสดง TOR ปีก่อนที่คล้ายกัน + สรุป SOW ที่คาดว่าจะมี + ฝั่งเทศบาลคลองหลวงกด Confirm ได้"
-      upcoming={[
-        "Card per โครงการ พร้อม TOR matches (fuzzy similarity)",
-        "ร่าง SOW components — แยก source-grounded vs inferred",
-        "ปุ่ม Confirm พร้อมหมายเหตุ (สำหรับเทศบาลคลองหลวง)",
-        "Export ไป DOCX (D2 comparison report)",
-      ]}
-    />
+    <div className="mx-auto max-w-[1440px] px-6 py-10">
+      <header className="mb-6 flex items-start gap-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-metier-orange text-[20px] font-bold text-white">
+          6
+        </span>
+        <div>
+          <h1 className="text-[32px] font-bold leading-tight">โครงการที่เลือก · TOR + SOW</h1>
+          <p className="mt-2 max-w-3xl font-light text-[color:var(--color-muted-fg)]">
+            แต่ละโครงการที่เลือกในหน้า 5 — Admin เพิ่ม{" "}
+            <strong>TOR อ้างอิง</strong> และ <strong>SOW</strong> เองในแต่ละ card
+            แล้วให้ฝั่งเทศบาลคลองหลวงกด <strong>Confirm</strong>
+          </p>
+        </div>
+      </header>
+
+      <SelectedExplorer projects={projects} />
+    </div>
   );
 }

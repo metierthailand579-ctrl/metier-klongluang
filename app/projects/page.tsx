@@ -1,19 +1,40 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import {
+  getAllProjects,
+  uniqueDepartments,
+  uniqueMetierAreas,
+  uniqueStrategies,
+} from "@/lib/data/projects";
+import { ProjectsExplorer } from "@/components/projects/projects-explorer";
 
 export const metadata = { title: "โครงการทั้งหมด · คลองหลวง 2026" };
 
-export default function Page() {
+export default function ProjectsPage() {
+  const projects = getAllProjects();
+  const strategies = uniqueStrategies();
+  const departments = uniqueDepartments();
+  const metierAreas = uniqueMetierAreas();
+
   return (
-    <PlaceholderPage
-      n="2"
-      title="ข้อมูลโครงการทั้งหมดในแผน"
-      description="1,333 โครงการในแผนพัฒนา 5 ปี — แสดงเฉพาะ field สำคัญ + KPI สรุป (มูลค่ารวม, จำนวน, แยกตามแผน)"
-      upcoming={[
-        "KPI cards: รวม 1,333 / มูลค่า / per ปี",
-        "DataTable สำคัญ: ชื่อ, หน่วยงาน, ยุทธศาสตร์, งบ, ปี",
-        "Search, Filter, Sort, pagination",
-        "Drill-down คลิกเข้าหน้า detail แต่ละโครงการ",
-      ]}
-    />
+    <div className="mx-auto max-w-[1440px] px-6 py-10">
+      <header className="mb-6 flex items-start gap-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-metier-orange text-[20px] font-bold text-white">
+          2
+        </span>
+        <div>
+          <h1 className="text-[32px] font-bold leading-tight">โครงการทั้งหมดในแผน</h1>
+          <p className="mt-2 max-w-3xl font-light text-[color:var(--color-muted-fg)]">
+            1,333 โครงการในแผนพัฒนาท้องถิ่นเทศบาลเมืองคลองหลวง พ.ศ. 2566–2570
+            — แสดงเฉพาะ field สำคัญ พร้อมค้นหา กรอง เรียง
+          </p>
+        </div>
+      </header>
+
+      <ProjectsExplorer
+        initialProjects={projects}
+        strategies={strategies}
+        departments={departments}
+        metierAreas={metierAreas}
+      />
+    </div>
   );
 }

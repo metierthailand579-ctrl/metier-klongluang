@@ -1,0 +1,44 @@
+import projectsJson from "@/data/projects.json";
+import type { ProjectRecord } from "@/types/db";
+
+const projects = projectsJson as unknown as ProjectRecord[];
+
+export function getAllProjects(): ProjectRecord[] {
+  return projects;
+}
+
+export function getProjectById(id: string): ProjectRecord | undefined {
+  return projects.find((p) => p.master_project_id === id);
+}
+
+export function getMetierProjects(): ProjectRecord[] {
+  return projects.filter(
+    (p) => p.metier_service_area_layer1 && p.metier_service_area_layer1 !== "NOT_APPLICABLE",
+  );
+}
+
+// -------- pre-computed lookups (cheap because we run on the server) --------
+
+export function uniqueDepartments(): string[] {
+  const set = new Set<string>();
+  for (const p of projects) {
+    if (p.responsible_department) set.add(p.responsible_department);
+  }
+  return Array.from(set).sort();
+}
+
+export function uniqueStrategies(): string[] {
+  const set = new Set<string>();
+  for (const p of projects) {
+    if (p.work_category_layer1) set.add(p.work_category_layer1);
+  }
+  return Array.from(set).sort();
+}
+
+export function uniqueMetierAreas(): string[] {
+  const set = new Set<string>();
+  for (const p of projects) {
+    if (p.metier_service_area_layer1) set.add(p.metier_service_area_layer1);
+  }
+  return Array.from(set).sort();
+}

@@ -9,7 +9,8 @@
     "lint": "eslint",
     "seed:projects": "tsx scripts/seed-projects.ts",
     "seed:history": "tsx scripts/seed-history.ts",
-    "seed:all": "npm run seed:projects && npm run seed:history"
+    "seed:all": "npm run seed:projects && npm run seed:history",
+    "data:build": "tsx scripts/build-local-data.ts"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",

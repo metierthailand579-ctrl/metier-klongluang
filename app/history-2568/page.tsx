@@ -1,19 +1,33 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import {
+  getAllHistory,
+  uniqueHistoryCategories,
+  uniqueHistoryYears,
+} from "@/lib/data/history";
+import { HistoryExplorer } from "@/components/history/history-explorer";
 
 export const metadata = { title: "ย้อนหลังปี 2568 · คลองหลวง 2026" };
 
-export default function Page() {
+export default function HistoryPage() {
+  const records = getAllHistory();
+  const categories = uniqueHistoryCategories();
+  const years = uniqueHistoryYears();
+
   return (
-    <PlaceholderPage
-      n="4"
-      title="โครงการจัดซื้อจัดจ้างปี 2568"
-      description="1,449 รายการจริง (จากเอกสาร procurement) — ใช้เป็น reference เพื่อดูว่าโครงการที่คล้ายกัน เทศบาลเคยทำในรูปแบบไหน"
-      upcoming={[
-        "DataTable: เลขโครงการ, ชื่อโครงการ, ราคา, ประเภท, ปี",
-        "Bar chart per ประเภท + per เดือน",
-        "Search + filter ปี (2567/2568/2569)",
-        "Fuzzy-match ไปหา selected project ใน Page 6",
-      ]}
-    />
+    <div className="mx-auto max-w-[1440px] px-6 py-10">
+      <header className="mb-6 flex items-start gap-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-metier-orange text-[20px] font-bold text-white">
+          4
+        </span>
+        <div>
+          <h1 className="text-[32px] font-bold leading-tight">โครงการจัดซื้อจัดจ้างปี 2568</h1>
+          <p className="mt-2 max-w-3xl font-light text-[color:var(--color-muted-fg)]">
+            1,449 รายการที่เทศบาลจัดซื้อจัดจ้างจริง (ปี 2567–2569 ตามข้อมูล XLSX-04)
+            — ใช้เป็น reference เพื่อดูว่าโครงการคล้ายกัน เทศบาลเคยจัดซื้อในรูปแบบไหน
+          </p>
+        </div>
+      </header>
+
+      <HistoryExplorer records={records} categories={categories} years={years} />
+    </div>
   );
 }

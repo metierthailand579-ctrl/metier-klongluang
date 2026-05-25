@@ -1,19 +1,47 @@
-import { PlaceholderPage } from "@/components/placeholder-page";
+import {
+  getAllProjects,
+  uniqueDepartments,
+  uniqueMetierAreas,
+  uniqueStrategies,
+} from "@/lib/data/projects";
+import { FilterExplorer } from "@/components/filter/filter-explorer";
 
 export const metadata = { title: "คัดเลือก · คลองหลวง 2026" };
 
-export default function Page() {
+export default function FilterPage() {
+  const projects = getAllProjects();
+  const departments = uniqueDepartments();
+  const strategies = uniqueStrategies();
+  const metierAreas = uniqueMetierAreas();
+
   return (
-    <PlaceholderPage
-      n="5"
-      title="Filter + ติ๊กโครงการที่ Metier ทำได้"
-      description="กรอง 1,333 โครงการ → ติ๊กเลือก → สรุปสด ๆ (มูลค่ารวม, จำนวน, mix ของประเภท) เปลี่ยนทุกครั้งที่กด"
-      upcoming={[
-        "Filter sidebar: ยุทธศาสตร์, Metier service area, หน่วยงาน, ปี, ช่วงงบ",
-        "Sticky summary panel: total ฿, count, ประเภทแยก doughnut",
-        "Bulk select / select-by-filter / save selection",
-        "Selection state saved to Supabase (per user)",
-      ]}
-    />
+    <div className="mx-auto max-w-[1440px] px-6 py-10">
+      <header className="mb-6 flex items-start gap-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-metier-orange text-[20px] font-bold text-white">
+          5
+        </span>
+        <div>
+          <h1 className="text-[32px] font-bold leading-tight">
+            กรอง + ติ๊กเลือกโครงการที่ Metier ทำได้
+          </h1>
+          <p className="mt-2 max-w-3xl font-light text-[color:var(--color-muted-fg)]">
+            กรองโครงการตามยุทธศาสตร์ / หน่วยงาน / Metier service area / ช่วงงบ
+            แล้วติ๊กเลือก — <span className="font-medium text-fg">สรุปสด ๆ</span>{" "}
+            ทางขวาจะอัปเดตทุกครั้งที่กด (จำนวน, มูลค่ารวม, mix ของบริการ, หน่วยงาน)
+          </p>
+          <p className="mt-2 text-[13px] text-[color:var(--color-muted)]">
+            การเลือกถูกเก็บใน browser ของคุณเอง — เปิดใหม่จะยังอยู่.
+            เมื่อต่อ Supabase แล้ว จะ sync ข้ามอุปกรณ์ได้
+          </p>
+        </div>
+      </header>
+
+      <FilterExplorer
+        projects={projects}
+        departments={departments}
+        strategies={strategies}
+        metierAreas={metierAreas}
+      />
+    </div>
   );
 }
