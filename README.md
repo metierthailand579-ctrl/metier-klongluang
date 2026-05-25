@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# คลองหลวง 2026 · Metier Opportunity Webapp
 
-## Getting Started
+Interactive web app เพื่อวิเคราะห์โครงการในแผนพัฒนาท้องถิ่นเทศบาลเมืองคลองหลวง พ.ศ. 2566–2570 และคัดเลือกโครงการที่ Metier (Thailand) Co., Ltd. มีโอกาสรับงาน
 
-First, run the development server:
+**Repo:** https://github.com/metierthailand579-ctrl/metier-klongluang
+
+---
+
+## 🏛 Stack
+
+- **Next.js 16** (App Router · TypeScript · Tailwind v4)
+- **shadcn/ui primitives** (Radix) + **Framer Motion** + **Recharts** + **Lucide**
+- **Supabase** (Postgres + Auth + RLS)
+- IBM Plex Sans Thai · Metier brand CI (`#ff5008` orange)
+
+## 🗺 หน้าหลัก (7)
+
+| # | Route | เนื้อหา |
+|---|---|---|
+| 1 | `/methodology` | Storytelling วิธีทำงาน S1→S11 (timeline + animations) |
+| 2 | `/projects` | 1,333 โครงการ — DataTable + KPI cards |
+| 3 | `/groups` | Treemap / Sunburst ของ Work Category L1/L2 + Metier Service Area |
+| 4 | `/history-2568` | 1,449 รายการจัดซื้อจัดจ้างจริง ปี 2568 (reference) |
+| 5 | `/filter` | Filter + ติ๊กเลือก + live summary (มูลค่ารวม, จำนวน, mix) |
+| 6 | `/selected` | โครงการที่เลือก + TOR matching + ร่าง SOW + ปุ่ม Confirm |
+| 7 | `/status` | Kanban: ร่าง TOR → เปิดโครงการ → ยื่น → ดำเนินงาน → เสร็จ |
+
+## 🚀 Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.local.example .env.local
+# fill NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY + SUPABASE_SERVICE_ROLE_KEY
+npm install
+npm run dev          # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🌱 Seed the database (one-time)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+After applying `supabase/migrations/0001_init.sql` (run via Supabase Dashboard SQL editor or MCP):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run seed:all     # projects (1,333) + procurement_history_2568 (1,449)
+# OR
+npm run seed:projects
+npm run seed:history
+```
 
-## Learn More
+Source files are read from the parent folder (`../output/extraction/ALL_records_v2.json` and `../2568 Project list/...xlsx`). Seed scripts use `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS.
 
-To learn more about Next.js, take a look at the following resources:
+## ☁️ Deploy on Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Import repo** → https://vercel.com/new
+2. **Root directory** → `web`
+3. **Framework preset** → Next.js (auto-detected)
+4. **Environment variables** (Project Settings → Environment Variables):
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://kvnbtsadnnjszdiktbhb.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = `<from Supabase dashboard>`
+   - *(do NOT add `SUPABASE_SERVICE_ROLE_KEY` to Vercel — server-side keys must never reach the browser; seeding is local only)*
+5. **Deploy** → Vercel runs `npm run build` automatically
+6. Supabase RLS protects writes; reads on `projects` and `procurement_history_2568` are public
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 📁 Project structure
 
-## Deploy on Vercel
+```
+app/                 home + 7 routes
+components/
+  brand/             MetierLogo, MetierSymbol
+  ui/                Button, Card, Badge (shadcn-style primitives)
+  site-header.tsx, site-footer.tsx, placeholder-page.tsx
+lib/
+  utils.ts           cn(), formatBaht(), formatBahtCompact()
+  supabase/          client.ts (browser) + server.ts (RSC)
+public/brand/        7 Metier PNG logos
+scripts/
+  seed-projects.ts   load ALL_records_v2.json → projects
+  seed-history.ts    load XLSX-04 clean sheet → procurement_history_2568
+supabase/
+  migrations/0001_init.sql   7 tables + enums + RLS + view
+types/db.ts          ProjectRecord, ProcurementRecord, Selection, ProjectStatus
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🗄 Database schema (7 tables)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Table | Rows | Purpose |
+|---|---|---|
+| `projects` | 1,333 | Master record of every planned project (read-public) |
+| `procurement_history_2568` | 1,449 | Real procurement records 2567–2569 (read-public) |
+| `selections` | dynamic | Metier-side picks: user_selected (TRUE/FALSE/TBD) + fit score |
+| `tor_matches` | dynamic | Fuzzy matches of selected → historical procurements |
+| `sow_components` | dynamic | SOW draft items per selected project |
+| `project_confirmations` | dynamic | เทศบาลคลองหลวง confirms via UI |
+| `project_status_timeline` | dynamic | Kanban status changes |
+
+View `v_project_full` joins all 7 tables for the Selected/Status pages.
+
+## 🎨 Brand CI
+
+Three colors only: `#ff5008` (accent), `#000000`, `#ffffff`. IBM Plex Sans Thai. Orange used as accent only — never for body copy.
+
+## 📜 License
+
+Internal / proprietary — Metier (Thailand) Co., Ltd.

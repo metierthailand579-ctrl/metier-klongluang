@@ -1,65 +1,115 @@
-import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
-export default function Home() {
+const SECTIONS = [
+  {
+    n: "1",
+    href: "/methodology",
+    title: "วิธีทำ",
+    desc: "เล่าวิธีการทำงานทั้งหมดของเรา ตั้งแต่อ่านเอกสาร 6 PDF จนถึงคัดเลือก",
+  },
+  {
+    n: "2",
+    href: "/projects",
+    title: "โครงการทั้งหมด",
+    desc: "1,333 โครงการในแผนพัฒนาท้องถิ่น พ.ศ. 2566–2570 พร้อมสรุป KPI",
+  },
+  {
+    n: "3",
+    href: "/groups",
+    title: "จัดกลุ่ม",
+    desc: "แบ่งกลุ่ม / สับกลุ่ม ตามยุทธศาสตร์ + Metier Service Area",
+  },
+  {
+    n: "4",
+    href: "/history-2568",
+    title: "โครงการปี 2568",
+    desc: "1,449 รายการจัดซื้อจัดจ้างจริงปี 2568 (ใช้เป็น reference)",
+  },
+  {
+    n: "5",
+    href: "/filter",
+    title: "คัดเลือก",
+    desc: "Filter + ติ๊กโครงการที่ Metier ทำได้ — สรุปสด ๆ ทุกครั้งที่เลือก",
+  },
+  {
+    n: "6",
+    href: "/selected",
+    title: "TOR + SOW",
+    desc: "โครงการที่เลือก เทียบกับ TOR เก่า + ร่าง SOW + ปุ่ม Confirm",
+  },
+  {
+    n: "7",
+    href: "/status",
+    title: "สถานะ",
+    desc: "Kanban: ร่าง TOR → เปิดโครงการ → ยื่น → ดำเนินงาน → เสร็จ",
+  },
+];
+
+export default function HomePage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div>
+      <section className="border-b border-[color:var(--color-border)]">
+        <div className="mx-auto max-w-[1440px] px-6 py-20 md:py-28">
+          <div className="max-w-4xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-subtle)] px-3 py-1 text-[13px] text-[color:var(--color-muted-fg)]">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-metier-orange" />
+              เทศบาลเมืองคลองหลวง × Metier (Thailand)
+            </div>
+            <h1 className="mb-5 text-[40px] font-bold leading-[1.1] md:text-[56px]">
+              คลองหลวง <span className="text-metier-orange">2026</span>
+              <br />
+              <span className="font-light text-[color:var(--color-muted-fg)]">
+                โอกาสในแผนพัฒนา 5 ปี
+              </span>
+            </h1>
+            <p className="mb-8 max-w-2xl text-[18px] font-light leading-relaxed text-[color:var(--color-muted-fg)]">
+              วิเคราะห์เอกสารแผนพัฒนาท้องถิ่นเทศบาลเมืองคลองหลวง พ.ศ. 2566–2570
+              จาก 6 PDF + 4 Excel รวม 1,333 โครงการ
+              คัดเลือกโครงการที่ Metier มีโอกาสรับงาน และเทียบกับ
+              ประวัติจัดซื้อจัดจ้างปี 2568 (1,449 รายการ) เพื่อร่าง SOW
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button asChild size="lg">
+                <Link href="/methodology">
+                  เริ่มดู วิธีการทำงาน <ArrowRight className="ml-1 h-4 w-4" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/projects">ไปยังข้อมูลโครงการ</Link>
+              </Button>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </section>
+
+      <section className="mx-auto max-w-[1440px] px-6 py-14">
+        <h2 className="mb-6 text-[24px] font-bold">7 หน้าหลัก</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {SECTIONS.map((s) => (
+            <Link key={s.href} href={s.href} className="group">
+              <Card className="h-full transition-all group-hover:-translate-y-0.5 group-hover:border-metier-orange/40 group-hover:shadow-md">
+                <CardContent className="pt-5">
+                  <div className="mb-3 flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-metier-orange font-bold text-white">
+                      {s.n}
+                    </span>
+                    <CardTitle>{s.title}</CardTitle>
+                  </div>
+                  <CardDescription className="leading-relaxed">
+                    {s.desc}
+                  </CardDescription>
+                  <div className="mt-4 flex items-center gap-1 text-[13px] text-metier-orange opacity-0 transition-opacity group-hover:opacity-100">
+                    เข้าหน้านี้ <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
         </div>
-      </main>
+      </section>
     </div>
   );
 }
