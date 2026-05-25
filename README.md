@@ -53,7 +53,7 @@ Source files are read from the parent folder (`../output/extraction/ALL_records_
 2. **Root directory** → `web`
 3. **Framework preset** → Next.js (auto-detected)
 4. **Environment variables** (Project Settings → Environment Variables):
-   - `NEXT_PUBLIC_SUPABASE_URL` = `https://kvnbtsadnnjszdiktbhb.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://ydwghfjszaxfdifzshik.supabase.co`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = `<from Supabase dashboard>`
    - *(do NOT add `SUPABASE_SERVICE_ROLE_KEY` to Vercel — server-side keys must never reach the browser; seeding is local only)*
 5. **Deploy** → Vercel runs `npm run build` automatically

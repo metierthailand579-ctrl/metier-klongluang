@@ -29,7 +29,7 @@ claude /mcp
 ทางเลือก **A. ใช้ Supabase MCP** (เมื่อ authenticated แล้ว): Claude จะ run migration ให้
 
 ทางเลือก **B. รันมือใน Dashboard**:
-1. https://supabase.com/dashboard/project/kvnbtsadnnjszdiktbhb/sql/new
+1. https://supabase.com/dashboard/project/ydwghfjszaxfdifzshik/sql/new
 2. paste เนื้อหา `supabase/migrations/0001_init.sql`
 3. กด Run
 
@@ -39,7 +39,7 @@ claude /mcp
 cp .env.local.example .env.local
 ```
 แก้ค่า:
-- `NEXT_PUBLIC_SUPABASE_URL` = `https://kvnbtsadnnjszdiktbhb.supabase.co`
+- `NEXT_PUBLIC_SUPABASE_URL` = `https://ydwghfjszaxfdifzshik.supabase.co`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` ← Supabase Dashboard → Settings → API → anon public
 - `SUPABASE_SERVICE_ROLE_KEY` ← Supabase Dashboard → Settings → API → service_role (เก็บลับ)
 
@@ -63,7 +63,7 @@ npm run seed:all
 4. Framework Preset → Next.js (auto)
 5. **Environment Variables** → เพิ่ม 2 ตัว (anon key only):
    ```
-   NEXT_PUBLIC_SUPABASE_URL         = https://kvnbtsadnnjszdiktbhb.supabase.co
+   NEXT_PUBLIC_SUPABASE_URL         = https://ydwghfjszaxfdifzshik.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY    = <จาก Supabase>
    ```
    ⚠️ **อย่า** ใส่ `SUPABASE_SERVICE_ROLE_KEY` ใน Vercel — เป็น server-side seed key ใช้ local เท่านั้น
