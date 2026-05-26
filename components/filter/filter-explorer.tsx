@@ -12,6 +12,7 @@ import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
 import { pdfShort } from "@/lib/data/pdf-labels";
 import { TEAM_PICKS, TEAM_PICK_IDS } from "@/lib/data/team-picks";
 import { useLocalStorage } from "@/lib/storage";
+import { useSyncedState } from "@/lib/shared-state";
 import type { ProjectRecord } from "@/types/db";
 import {
   ALL_MAIN_GROUPS,
@@ -45,8 +46,8 @@ export function FilterExplorer({
   strategies: string[];
   metierAreas: string[];
 }) {
-  const [selected, setSelected, hydrated] = useLocalStorage<string[]>(STORAGE_KEY, []);
-  const [overrides] = useLocalStorage<OverrideMap>(GROUP_OVERRIDES_KEY, {});
+  const [selected, setSelected, hydrated] = useSyncedState<string[]>(STORAGE_KEY, []);
+  const [overrides] = useSyncedState<OverrideMap>(GROUP_OVERRIDES_KEY, {});
 
   const [q, setQ] = useState("");
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);

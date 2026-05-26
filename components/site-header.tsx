@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MetierLogo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
-import { useLocalStorage } from "@/lib/storage";
+import { useSyncedState } from "@/lib/shared-state";
 
 const SELECTED_KEY = "khlongluang.selectedProjects.v1";
 const CONFIRM_KEY = "khlongluang.confirmations.v1";
@@ -25,8 +25,8 @@ type ConfirmRecord = { confirmed: boolean };
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const [selectedIds, , hydrated1] = useLocalStorage<string[]>(SELECTED_KEY, []);
-  const [confirmMap, , hydrated2] = useLocalStorage<Record<string, ConfirmRecord>>(
+  const [selectedIds, , hydrated1] = useSyncedState<string[]>(SELECTED_KEY, []);
+  const [confirmMap, , hydrated2] = useSyncedState<Record<string, ConfirmRecord>>(
     CONFIRM_KEY,
     {},
   );

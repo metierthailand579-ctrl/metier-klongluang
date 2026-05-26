@@ -34,6 +34,7 @@ import {
 import { KpiCard } from "@/components/kpi-card";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
 import { useLocalStorage } from "@/lib/storage";
+import { useSyncedState } from "@/lib/shared-state";
 import type { ProjectRecord } from "@/types/db";
 import {
   GROUP_COLOR,
@@ -146,20 +147,22 @@ export function priorityLabel(p: Priority): string {
 }
 
 export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
-  const [selectedIds, , hydrated] = useLocalStorage<string[]>(SELECTED_KEY, []);
-  const [torMap, setTorMap] = useLocalStorage<Record<string, TorRef[]>>(TOR_KEY, {});
-  const [sowMap, setSowMap] = useLocalStorage<Record<string, string[]>>(SOW_KEY, {});
-  const [confirmMap, setConfirmMap] = useLocalStorage<Record<string, ConfirmRecord>>(
+  const [selectedIds, , hydrated] = useSyncedState<string[]>(SELECTED_KEY, []);
+  const [torMap, setTorMap] = useSyncedState<Record<string, TorRef[]>>(TOR_KEY, {});
+  const [sowMap, setSowMap] = useSyncedState<Record<string, string[]>>(SOW_KEY, {});
+  const [confirmMap, setConfirmMap] = useSyncedState<Record<string, ConfirmRecord>>(
     CONFIRM_KEY,
     {},
   );
-  const [metaMap, setMetaMap] = useLocalStorage<Record<string, ProjectMeta>>(META_KEY, {});
+  const [metaMap, setMetaMap] = useSyncedState<Record<string, ProjectMeta>>(META_KEY, {});
+  // File attachments stay local-only: base64 in a shared JSONB column would
+  // explode the table size and isn't useful until we wire Supabase Storage.
   const [attachMap, setAttachMap] = useLocalStorage<Record<string, TorAttachment[]>>(
     ATTACH_KEY,
     {},
   );
 
-  const [overrides] = useLocalStorage<OverrideMap>(GROUP_OVERRIDES_KEY, {});
+  const [overrides] = useSyncedState<OverrideMap>(GROUP_OVERRIDES_KEY, {});
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [scheduleFilter, setScheduleFilter] = useState<ScheduleFilter>("all");
@@ -583,7 +586,8 @@ function ProjectCard({
           <div className="text-[18px] font-bold tabular-nums">
             {formatBaht(project.total_budget)}
           </div>
-          <div className="mt-1 text-[12px] text-[color:var(--color-muted)]">บาท</div>
+          <div className="mt-0.5 text-[11px] text-[color:var(--color-muted)]">บาท · รวม</div>
+          <BudgetByYear project={project} />
         </div>
         <div className="shrink-0 self-center">
           {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1005,6 +1009,38 @@ function ConfirmStrip({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Compact 2568 / 2569 / 2570 budget split shown under the total in each
+ * project card header. Years with 0 budget are dimmed to keep the focus on
+ * where the money actually lands.
+ */
+function BudgetByYear({ project }: { project: ProjectRecord }) {
+  const years: Array<[number, number]> = [
+    [2568, Number(project.budget_2568) || 0],
+    [2569, Number(project.budget_2569) || 0],
+    [2570, Number(project.budget_2570) || 0],
+  ];
+  return (
+    <div className="mt-2 flex justify-end gap-1.5 text-[10.5px] tabular-nums">
+      {years.map(([y, v]) => (
+        <div
+          key={y}
+          className={cn(
+            "rounded px-1.5 py-0.5",
+            v > 0
+              ? "bg-[color:var(--color-subtle)] text-fg"
+              : "text-[color:var(--color-muted)]",
+          )}
+          title={`พ.ศ. ${y}: ${formatBaht(v)} บาท`}
+        >
+          <span className="opacity-60">{y}</span>{" "}
+          <span className="font-semibold">{v > 0 ? formatBahtCompact(v) : "—"}</span>
+        </div>
+      ))}
     </div>
   );
 }

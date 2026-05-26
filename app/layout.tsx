@@ -3,6 +3,7 @@ import { IBM_Plex_Sans_Thai } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { TeamPicksSeeder } from "@/components/team-picks-seeder";
 
 const plexThai = IBM_Plex_Sans_Thai({
   variable: "--font-plex-thai",

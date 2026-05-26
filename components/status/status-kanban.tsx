@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { KpiCard } from "@/components/kpi-card";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
 import { useLocalStorage } from "@/lib/storage";
+import { useSyncedState } from "@/lib/shared-state";
 import { PROJECT_STATUSES, type ProjectStatus } from "@/types/db";
 import type { ProjectRecord } from "@/types/db";
 import {
@@ -73,18 +74,20 @@ const COLUMN_COLORS: Record<ProjectStatus, string> = {
 };
 
 export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
-  const [selectedIds, , hydrated1] = useLocalStorage<string[]>(SELECTED_KEY, []);
-  const [confirmMap, , hydrated2] = useLocalStorage<Record<string, ConfirmRecord>>(
+  const [selectedIds, , hydrated1] = useSyncedState<string[]>(SELECTED_KEY, []);
+  const [confirmMap, , hydrated2] = useSyncedState<Record<string, ConfirmRecord>>(
     CONFIRM_KEY,
     {},
   );
-  const [board, setBoard, hydrated3] = useLocalStorage<StatusBoard>(STATUS_KEY, {});
-  const [metaMap] = useLocalStorage<Record<string, ProjectMeta>>(META_KEY, {});
+  const [board, setBoard, hydrated3] = useSyncedState<StatusBoard>(STATUS_KEY, {});
+  const [metaMap] = useSyncedState<Record<string, ProjectMeta>>(META_KEY, {});
+  // Phase durations are a per-user view setting, not a team decision —
+  // keep them local so they don't override each other's preferences.
   const [durations, setDurations] = useLocalStorage<PhaseDurations>(
     DURATIONS_KEY,
     DEFAULT_DURATIONS,
   );
-  const [comments, setComments] = useLocalStorage<CommentMap>(COMMENTS_KEY, {});
+  const [comments, setComments] = useSyncedState<CommentMap>(COMMENTS_KEY, {});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
@@ -518,6 +521,7 @@ function KanbanCard({
               {formatBahtCompact(project.total_budget || 0)}
             </span>
           </div>
+          <YearStripCompact project={project} />
         </button>
       </div>
 
@@ -668,8 +672,9 @@ function DetailDrawer({
 
       {/* Schedule details */}
       <div className="space-y-3 border-b border-[color:var(--color-border)] p-5">
+        <YearBudgetBreakdown project={project} />
         <div className="grid grid-cols-2 gap-3 text-[12px]">
-          <Info label="งบประมาณ" value={formatBaht(project.total_budget) + " บาท"} />
+          <Info label="งบประมาณรวม" value={formatBaht(project.total_budget) + " บาท"} />
           <Info label="ตั้งใจเริ่ม" value={meta?.start_q ? meta.start_q.replace("-", " ") : "—"} />
           <Info label="วันเริ่มจริง (calc)" value={formatThaiDate(schedule.startDate)} />
           <Info
@@ -809,6 +814,84 @@ function DetailDrawer({
             <Send className="h-3.5 w-3.5" /> ส่ง comment
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tiny per-year budget pills shown under each Kanban card. Years with no
+ * budget render dim so the eye lands on where money actually sits.
+ */
+function YearStripCompact({ project }: { project: ProjectRecord }) {
+  const ys: Array<[number, number]> = [
+    [2568, Number(project.budget_2568) || 0],
+    [2569, Number(project.budget_2569) || 0],
+    [2570, Number(project.budget_2570) || 0],
+  ];
+  return (
+    <div className="mt-1.5 grid grid-cols-3 gap-1 text-[9.5px] tabular-nums">
+      {ys.map(([y, v]) => (
+        <div
+          key={y}
+          className={cn(
+            "rounded px-1 py-0.5 text-center",
+            v > 0
+              ? "bg-[color:var(--color-subtle)] text-fg"
+              : "text-[color:var(--color-muted)]",
+          )}
+          title={`พ.ศ. ${y}: ${formatBaht(v)} บาท`}
+        >
+          <span className="opacity-60">{String(y).slice(-2)}</span>{" "}
+          <span className="font-semibold">{v > 0 ? formatBahtCompact(v) : "—"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Larger per-year budget block used inside the detail drawer. Visualises
+ * how the total budget is allocated across the 3 plan years.
+ */
+function YearBudgetBreakdown({ project }: { project: ProjectRecord }) {
+  const ys: Array<[number, number]> = [
+    [2568, Number(project.budget_2568) || 0],
+    [2569, Number(project.budget_2569) || 0],
+    [2570, Number(project.budget_2570) || 0],
+  ];
+  const total = ys.reduce((s, [, v]) => s + v, 0);
+  return (
+    <div className="rounded-md border border-[color:var(--color-border)] bg-white p-3">
+      <div className="mb-2 text-[11px] font-medium text-[color:var(--color-muted-fg)]">
+        งบประมาณตามปี
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {ys.map(([y, v]) => {
+          const pct = total ? (v / total) * 100 : 0;
+          return (
+            <div key={y}>
+              <div className="text-[10px] text-[color:var(--color-muted)]">พ.ศ. {y}</div>
+              <div
+                className={cn(
+                  "mt-0.5 text-[15px] font-bold tabular-nums leading-tight",
+                  v > 0 ? "text-fg" : "text-[color:var(--color-muted)]",
+                )}
+              >
+                {v > 0 ? formatBahtCompact(v) : "—"}
+              </div>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-[color:var(--color-subtle)]">
+                <div
+                  className="h-full rounded-full bg-metier-orange/80"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="mt-0.5 text-[9.5px] tabular-nums text-[color:var(--color-muted)]">
+                {pct.toFixed(0)}%
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

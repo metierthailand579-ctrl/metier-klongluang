@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
-import { useLocalStorage } from "@/lib/storage";
+import { useSyncedState } from "@/lib/shared-state";
 import type { ProjectRecord } from "@/types/db";
 import {
   ALL_MAIN_GROUPS,
@@ -108,7 +108,7 @@ export function GroupsExplorer({ projects }: { projects: ProjectRecord[] }) {
   const [activePrimary, setActivePrimary] = useState<string | null>(null);
 
   // Manual classifications set in the tagger below. Persisted in localStorage.
-  const [overrides, setOverrides] = useLocalStorage<OverrideMap>(
+  const [overrides, setOverrides] = useSyncedState<OverrideMap>(
     "klongluang.groupOverrides.v1",
     {},
   );

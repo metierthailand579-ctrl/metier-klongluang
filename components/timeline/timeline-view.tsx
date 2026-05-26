@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/c
 import { Badge } from "@/components/ui/badge";
 import { KpiCard } from "@/components/kpi-card";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
-import { useLocalStorage } from "@/lib/storage";
+import { useSyncedState } from "@/lib/shared-state";
 import type { ProjectRecord } from "@/types/db";
 import {
   GROUP_COLOR,
@@ -50,10 +50,10 @@ const PRIORITY_WEIGHT: Record<Priority, number> = {
 };
 
 export function TimelineView({ projects }: { projects: ProjectRecord[] }) {
-  const [selectedIds, , hydrated] = useLocalStorage<string[]>(SELECTED_KEY, []);
-  const [metaMap] = useLocalStorage<Record<string, ProjectMeta>>(META_KEY, {});
-  const [confirmMap] = useLocalStorage<Record<string, ConfirmRecord>>(CONFIRM_KEY, {});
-  const [overrides] = useLocalStorage<OverrideMap>(GROUP_OVERRIDES_KEY, {});
+  const [selectedIds, , hydrated] = useSyncedState<string[]>(SELECTED_KEY, []);
+  const [metaMap] = useSyncedState<Record<string, ProjectMeta>>(META_KEY, {});
+  const [confirmMap] = useSyncedState<Record<string, ConfirmRecord>>(CONFIRM_KEY, {});
+  const [overrides] = useSyncedState<OverrideMap>(GROUP_OVERRIDES_KEY, {});
 
   const items = useMemo(() => {
     const set = new Set(selectedIds);
