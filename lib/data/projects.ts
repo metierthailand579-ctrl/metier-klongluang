@@ -1,8 +1,17 @@
 import projectsJson from "@/data/projects.json";
 import type { ProjectRecord } from "@/types/db";
 import { getMainGroup, isMetierGroup } from "@/lib/data/metier-taxonomy";
+import { cleanDept, cleanProjectName } from "@/lib/data/name-fixes";
 
-const projects = projectsJson as unknown as ProjectRecord[];
+// Clean OCR typos once at module load. The original JSON stays as-is —
+// `lib/data/name-fixes.ts` is the single place to add more corrections.
+const projects: ProjectRecord[] = (projectsJson as unknown as ProjectRecord[]).map(
+  (p) => ({
+    ...p,
+    project_name_th: cleanProjectName(p.project_name_th),
+    responsible_department: cleanDept(p.responsible_department),
+  }),
+);
 
 export function getAllProjects(): ProjectRecord[] {
   return projects;

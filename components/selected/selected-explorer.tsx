@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { KpiCard } from "@/components/kpi-card";
+import { YearBudgetStrip } from "@/components/year-budget-strip";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
 import { useLocalStorage } from "@/lib/storage";
 import { useSyncedState } from "@/lib/shared-state";
@@ -355,6 +356,8 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
           Export CSV
         </Button>
       </div>
+
+      <YearBudgetStrip projects={allItems} title="งบประมาณตามปี (โครงการที่เลือก)" />
 
       <div className="rounded-md border border-dashed border-amber-500/40 bg-amber-50 px-4 py-2 text-[12px] text-amber-900">
         <AlertTriangle className="mr-1 inline h-3.5 w-3.5 -translate-y-px" />

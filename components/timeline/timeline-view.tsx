@@ -6,6 +6,7 @@ import { CalendarClock, CheckCircle2, ChevronRight, Flag } from "lucide-react";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KpiCard } from "@/components/kpi-card";
+import { YearBudgetStrip } from "@/components/year-budget-strip";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
 import { useSyncedState } from "@/lib/shared-state";
 import type { ProjectRecord } from "@/types/db";
@@ -39,6 +40,11 @@ const QUARTERS: QuarterKey[] = [
   "2570-Q3",
   "2570-Q4",
 ];
+
+// Map a quarter (e.g. "2569-Q2") to the year-specific budget column name.
+function quarterBudgetKey(q: QuarterKey): "budget_2568" | "budget_2569" | "budget_2570" {
+  return q.startsWith("2570") ? "budget_2570" : "budget_2569";
+}
 
 // Priority weight for sorting cards within a quarter — higher = render first.
 const PRIORITY_WEIGHT: Record<Priority, number> = {
@@ -85,13 +91,18 @@ export function TimelineView({ projects }: { projects: ProjectRecord[] }) {
     for (const q of QUARTERS) byQ.get(q)!.sort(sortFn);
     unscheduled.sort(sortFn);
 
-    // Per-quarter totals
+    // Per-quarter totals — use that year's budget allocation so the bar
+    // chart reflects what work actually lands in that calendar slice.
     const totals = new Map<QuarterKey, { count: number; budget: number }>();
     for (const q of QUARTERS) {
       const list = byQ.get(q)!;
+      const yearKey = quarterBudgetKey(q);
       totals.set(q, {
         count: list.length,
-        budget: list.reduce((s, p) => s + (Number(p.total_budget) || 0), 0),
+        budget: list.reduce(
+          (s, p) => s + (Number(p[yearKey as keyof ProjectRecord]) || 0),
+          0,
+        ),
       });
     }
     return { byQ, unscheduled, totals };
@@ -182,6 +193,8 @@ export function TimelineView({ projects }: { projects: ProjectRecord[] }) {
           unit={`(🔥${summary.urgent} ↑${summary.high})`}
         />
       </motion.div>
+
+      <YearBudgetStrip projects={items} title="งบประมาณตามปี (โครงการที่เลือก)" />
 
       {/* Quarter load bar */}
       <Card>
@@ -307,8 +320,20 @@ function QuarterColumn({
   overrides: OverrideMap;
   fullWidth?: boolean;
 }) {
-  const totalBudget = projects.reduce((s, p) => s + (Number(p.total_budget) || 0), 0);
   const isUnscheduled = quarter === "UNSCHEDULED";
+  // For scheduled quarters: sum the year-specific budget column so the
+  // header reflects budget that lands in this calendar slice (not the
+  // full multi-year project total).
+  const yearKey =
+    isUnscheduled ? null : quarterBudgetKey(quarter as QuarterKey);
+  const totalBudget = projects.reduce(
+    (s, p) =>
+      s +
+      (yearKey
+        ? Number(p[yearKey as keyof ProjectRecord]) || 0
+        : Number(p.total_budget) || 0),
+    0,
+  );
 
   return (
     <div
@@ -347,6 +372,7 @@ function QuarterColumn({
             <ProjectChip
               key={p.master_project_id}
               project={p}
+              yearKey={yearKey}
               meta={metaMap[p.master_project_id]}
               confirm={confirmMap[p.master_project_id]}
               overrides={overrides}
@@ -360,11 +386,13 @@ function QuarterColumn({
 
 function ProjectChip({
   project,
+  yearKey,
   meta,
   confirm,
   overrides,
 }: {
   project: ProjectRecord;
+  yearKey: "budget_2568" | "budget_2569" | "budget_2570" | null;
   meta?: ProjectMeta;
   confirm?: ConfirmRecord;
   overrides: OverrideMap;
@@ -372,6 +400,14 @@ function ProjectChip({
   const main = getMainGroup(project, overrides);
   const groupColor = GROUP_COLOR[main] ?? "#94a3b8";
   const pColor = meta?.priority ? priorityColor(meta.priority) : null;
+  // When the project sits in a scheduled quarter, show the budget for THAT
+  // year (e.g. only what hits 2569 budget if it's in 2569-Q3). Fall back
+  // to total when the quarter is "UNSCHEDULED" or that year is 0.
+  const total = Number(project.total_budget) || 0;
+  const yearBudget = yearKey ? Number(project[yearKey as keyof ProjectRecord]) || 0 : 0;
+  const showYear = yearKey != null;
+  const primaryBudget = showYear && yearBudget > 0 ? yearBudget : total;
+  const yearLabel = yearKey === "budget_2570" ? "2570" : yearKey === "budget_2569" ? "2569" : "2568";
   return (
     <motion.a
       href="/selected"
@@ -392,9 +428,25 @@ function ProjectChip({
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[13px] font-bold tabular-nums" style={{ color: groupColor }}>
-            {formatBahtCompact(Number(project.total_budget) || 0)}
+          <div
+            className="text-[13px] font-bold tabular-nums"
+            style={{ color: groupColor }}
+            title={
+              showYear
+                ? `งบปี ${yearLabel}: ${formatBahtCompact(yearBudget)} / รวมโครงการ: ${formatBahtCompact(total)}`
+                : `งบรวม: ${formatBahtCompact(total)}`
+            }
+          >
+            {formatBahtCompact(primaryBudget)}
           </div>
+          {showYear && (
+            <div className="text-[9px] text-[color:var(--color-muted)] leading-tight">
+              งบ {yearLabel}
+              {yearBudget === 0 && total > 0 && (
+                <span className="ml-0.5 opacity-70">· รวม</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
