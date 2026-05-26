@@ -91,9 +91,12 @@ export type ConfirmRecord = {
   confirmed_at?: string;
 };
 
+export type TorUsability = "pending" | "usable" | "not_usable";
+
 export type TorRef = {
   code: string;
   note: string;
+  usable?: TorUsability; // undefined === "pending" (back-compat for existing rows)
 };
 
 export type Priority = "urgent" | "high" | "medium" | "low" | "";
@@ -725,11 +728,32 @@ function TorRefList({
 
   const add = () => {
     if (!code.trim() && !note.trim()) return;
-    onUpdate((prev) => [...prev, { code: code.trim(), note: note.trim() }]);
+    onUpdate((prev) => [
+      ...prev,
+      { code: code.trim(), note: note.trim(), usable: "pending" as const },
+    ]);
     setCode("");
     setNote("");
   };
   const remove = (i: number) => onUpdate((prev) => prev.filter((_, idx) => idx !== i));
+  const cycleUsable = (i: number) =>
+    onUpdate((prev) =>
+      prev.map((t, idx) => {
+        if (idx !== i) return t;
+        const next: TorUsability =
+          (t.usable ?? "pending") === "pending"
+            ? "usable"
+            : t.usable === "usable"
+              ? "not_usable"
+              : "pending";
+        return { ...t, usable: next };
+      }),
+    );
+
+  // Tally usability for the header badge
+  const usableCount = items.filter((t) => t.usable === "usable").length;
+  const notUsableCount = items.filter((t) => t.usable === "not_usable").length;
+  const pendingCount = items.length - usableCount - notUsableCount;
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -759,12 +783,31 @@ function TorRefList({
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <FileText className="h-4 w-4 text-[color:var(--color-muted-fg)]" />
         <h3 className="font-bold">TOR อ้างอิง</h3>
         <Badge variant="muted" className="ml-auto">
           {items.length} ref · {attachments.length} ไฟล์
         </Badge>
+        {items.length > 0 && (
+          <div className="flex w-full gap-1 text-[10.5px]">
+            {usableCount > 0 && (
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-50 px-1.5 py-0.5 text-emerald-700">
+                ✓ ใช้ได้ {usableCount}
+              </span>
+            )}
+            {pendingCount > 0 && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                ⏳ รอตรวจ {pendingCount}
+              </span>
+            )}
+            {notUsableCount > 0 && (
+              <span className="rounded-full border border-red-500/40 bg-red-50 px-1.5 py-0.5 text-red-700">
+                ✗ ใช้ไม่ได้ {notUsableCount}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* TOR refs (text) */}
@@ -774,26 +817,50 @@ function TorRefList({
         </div>
       ) : (
         <ul className="space-y-2">
-          {items.map((t, i) => (
-            <li
-              key={i}
-              className="group flex items-start gap-2 rounded-md border border-[color:var(--color-border)] bg-white p-2.5 text-[13px]"
-            >
-              <div className="min-w-0 flex-1">
-                {t.code && (
-                  <div className="font-mono text-[11px] text-metier-orange">{t.code}</div>
+          {items.map((t, i) => {
+            const u = t.usable ?? "pending";
+            const usableStyles =
+              u === "usable"
+                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                : u === "not_usable"
+                  ? "border-red-500 bg-red-50 text-red-700 line-through opacity-60"
+                  : "border-amber-500/50 bg-amber-50/50 text-amber-700";
+            const usableLabel =
+              u === "usable" ? "✓ ใช้ได้" : u === "not_usable" ? "✗ ใช้ไม่ได้" : "⏳ รอตรวจ";
+            return (
+              <li
+                key={i}
+                className={cn(
+                  "group flex items-start gap-2 rounded-md border bg-white p-2.5 text-[13px]",
+                  u === "not_usable" ? "border-red-200" : "border-[color:var(--color-border)]",
                 )}
-                {t.note && <div className="mt-0.5 leading-snug">{t.note}</div>}
-              </div>
-              <button
-                onClick={() => remove(i)}
-                className="invisible shrink-0 rounded p-0.5 text-[color:var(--color-muted)] hover:bg-[color:var(--color-subtle)] hover:text-fg group-hover:visible"
-                title="ลบ"
               >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
+                <div className={cn("min-w-0 flex-1", u === "not_usable" && "opacity-60")}>
+                  {t.code && (
+                    <div className="font-mono text-[11px] text-metier-orange">{t.code}</div>
+                  )}
+                  {t.note && <div className="mt-0.5 leading-snug">{t.note}</div>}
+                </div>
+                <button
+                  onClick={() => cycleUsable(i)}
+                  className={cn(
+                    "shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors",
+                    usableStyles,
+                  )}
+                  title="คลิกเพื่อเปลี่ยน: รอตรวจ → ใช้ได้ → ใช้ไม่ได้"
+                >
+                  {usableLabel}
+                </button>
+                <button
+                  onClick={() => remove(i)}
+                  className="invisible shrink-0 rounded p-0.5 text-[color:var(--color-muted)] hover:bg-[color:var(--color-subtle)] hover:text-fg group-hover:visible"
+                  title="ลบ"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
 

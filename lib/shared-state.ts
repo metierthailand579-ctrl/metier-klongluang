@@ -21,7 +21,9 @@ export function useSyncedState<T>(
   initial: T,
   options: { debounceMs?: number; subscribe?: boolean } = {},
 ): [T, (next: T | ((prev: T) => T)) => void, boolean] {
-  const { debounceMs = 500, subscribe = true } = options;
+  // 200ms is snappy enough for collaborative edits while still batching
+  // bursty input like typing in textareas.
+  const { debounceMs = 200, subscribe = true } = options;
   const [value, setValue] = useState<T>(initial);
   const [hydrated, setHydrated] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);

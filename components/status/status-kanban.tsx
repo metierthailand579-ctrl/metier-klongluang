@@ -54,6 +54,29 @@ const META_KEY = "khlongluang.projectMeta.v1";
 const STATUS_KEY = "khlongluang.statuses.v1";
 const DURATIONS_KEY = "khlongluang.phaseDurations.v1";
 const COMMENTS_KEY = "khlongluang.statusComments.v1";
+const WORKFLOW_KEY = "khlongluang.workflowState.v1";
+
+// Per-project working sub-status (independent of the column position) so the
+// team can mark things as "blocked" / "on hold" / "ready" while they sit
+// in the same Kanban stage.
+export type WorkflowState = "active" | "on_hold" | "blocked" | "ready";
+
+const WORKFLOW_OPTIONS: Array<{
+  value: WorkflowState;
+  label: string;
+  short: string;
+  color: string;
+  icon: string;
+}> = [
+  { value: "active", label: "กำลังทำ", short: "ทำ", color: "#0ea5e9", icon: "▶" },
+  { value: "on_hold", label: "หยุดชั่วคราว", short: "พัก", color: "#94a3b8", icon: "⏸" },
+  { value: "blocked", label: "ติดปัญหา", short: "ติด", color: "#dc2626", icon: "⚠" },
+  { value: "ready", label: "พร้อมส่งต่อ", short: "พร้อม", color: "#10b981", icon: "✓" },
+];
+
+function workflowMeta(w: WorkflowState | undefined) {
+  return WORKFLOW_OPTIONS.find((o) => o.value === w) ?? WORKFLOW_OPTIONS[0];
+}
 
 type ConfirmRecord = { confirmed: boolean; notes: string; confirmed_at?: string };
 
@@ -105,6 +128,10 @@ export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
     DEFAULT_DURATIONS,
   );
   const [comments, setComments] = useSyncedState<CommentMap>(COMMENTS_KEY, {});
+  const [workflowMap, setWorkflowMap] = useSyncedState<Record<string, WorkflowState>>(
+    WORKFLOW_KEY,
+    {},
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
@@ -316,6 +343,7 @@ export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
             currentStatus={currentStatus}
             scheduleMap={scheduleMap}
             metaMap={metaMap}
+            workflowMap={workflowMap}
             commentsCount={(pid) => (comments[pid] ?? []).length}
             onMove={moveTo}
             onOpenDetail={setActiveProjectId}
@@ -343,8 +371,15 @@ export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
                 comments={comments[activeProject.master_project_id] ?? []}
                 meta={metaMap[activeProject.master_project_id]}
                 confirm={confirmMap[activeProject.master_project_id]}
+                workflow={workflowMap[activeProject.master_project_id] ?? "active"}
                 currentStatus={currentStatus(activeProject.master_project_id)}
                 onSelectStatus={(s) => moveTo(activeProject.master_project_id, s)}
+                onSetWorkflow={(w) =>
+                  setWorkflowMap((prev) => ({
+                    ...prev,
+                    [activeProject.master_project_id]: w,
+                  }))
+                }
                 onAddComment={(body, author) =>
                   addComment(activeProject.master_project_id, body, author)
                 }
@@ -410,6 +445,7 @@ function ColumnGroup({
   currentStatus,
   scheduleMap,
   metaMap,
+  workflowMap,
   commentsCount,
   onMove,
   onOpenDetail,
@@ -419,6 +455,7 @@ function ColumnGroup({
   currentStatus: (pid: string) => ProjectStatus;
   scheduleMap: Map<string, ScheduleInfo>;
   metaMap: Record<string, ProjectMeta>;
+  workflowMap: Record<string, WorkflowState>;
   commentsCount: (pid: string) => number;
   onMove: (pid: string, s: ProjectStatus) => void;
   onOpenDetail: (pid: string) => void;
@@ -457,6 +494,7 @@ function ColumnGroup({
             currentStatus={currentStatus}
             scheduleMap={scheduleMap}
             metaMap={metaMap}
+            workflowMap={workflowMap}
             commentsCount={commentsCount}
             onMove={onMove}
             onOpenDetail={onOpenDetail}
@@ -475,6 +513,7 @@ function SubColumn({
   currentStatus,
   scheduleMap,
   metaMap,
+  workflowMap,
   commentsCount,
   onMove,
   onOpenDetail,
@@ -486,6 +525,7 @@ function SubColumn({
   currentStatus: (pid: string) => ProjectStatus;
   scheduleMap: Map<string, ScheduleInfo>;
   metaMap: Record<string, ProjectMeta>;
+  workflowMap: Record<string, WorkflowState>;
   commentsCount: (pid: string) => number;
   onMove: (pid: string, s: ProjectStatus) => void;
   onOpenDetail: (pid: string) => void;
@@ -547,10 +587,9 @@ function SubColumn({
                 project={p}
                 schedule={scheduleMap.get(p.master_project_id)!}
                 meta={metaMap[p.master_project_id]}
+                workflow={workflowMap[p.master_project_id] ?? "active"}
                 commentsN={commentsCount(p.master_project_id)}
                 color={color}
-                onSelectStatus={(s) => onMove(p.master_project_id, s)}
-                currentStatus={currentStatus(p.master_project_id)}
                 onOpenDetail={() => onOpenDetail(p.master_project_id)}
               />
             </motion.div>
@@ -570,23 +609,36 @@ function KanbanCard({
   project,
   schedule,
   meta,
+  workflow,
   commentsN,
   color,
-  onSelectStatus,
-  currentStatus,
   onOpenDetail,
 }: {
   project: ProjectRecord;
   schedule: ScheduleInfo;
   meta?: ProjectMeta;
+  workflow: WorkflowState;
   commentsN: number;
   color: string;
-  onSelectStatus: (s: ProjectStatus) => void;
-  currentStatus: ProjectStatus;
   onOpenDetail: () => void;
 }) {
   const stateColor = STATE_COLOR[schedule.state];
   const pColor = meta?.priority ? priorityColor(meta.priority) : null;
+  const wf = workflowMeta(workflow);
+  // Schedule glyph instead of long pill — keeps the card slim. Tooltip
+  // shows the full STATE_LABEL on hover.
+  const stateGlyph =
+    schedule.state === "late"
+      ? "⚠"
+      : schedule.state === "due_soon"
+        ? "⏰"
+        : schedule.state === "ahead"
+          ? "↑"
+          : schedule.state === "done"
+            ? "✓"
+            : schedule.state === "on_track"
+              ? "●"
+              : "·";
 
   return (
     <div
@@ -596,81 +648,71 @@ function KanbanCard({
         e.dataTransfer.effectAllowed = "move";
       }}
       className="group rounded-md border bg-white p-2.5 hover:border-metier-orange/40"
-      style={{ borderLeft: `3px solid ${stateColor}`, borderColor: "var(--color-border)", borderLeftColor: stateColor }}
+      style={{
+        borderLeft: `3px solid ${stateColor}`,
+        borderColor: "var(--color-border)",
+        borderLeftColor: stateColor,
+      }}
     >
       <div className="flex items-start gap-1.5">
         <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-grab text-[color:var(--color-muted)] group-hover:text-fg" />
         <button onClick={onOpenDetail} className="min-w-0 flex-1 text-left">
-          <div className="font-mono text-[10px] text-[color:var(--color-muted)]">
-            {project.master_project_id}
+          {/* Header row: workflow chip + state glyph + budget */}
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span
+              className="inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0 text-[10px] font-semibold"
+              style={{ borderColor: wf.color, color: wf.color }}
+              title={`สถานะการทำงาน: ${wf.label}`}
+            >
+              {wf.icon} {wf.label}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="text-[11px] font-bold"
+                style={{ color: stateColor }}
+                title={STATE_LABEL[schedule.state]}
+              >
+                {stateGlyph}
+              </span>
+              <span className="text-[12px] font-bold tabular-nums">
+                {formatBahtCompact(project.total_budget || 0)}
+              </span>
+            </div>
           </div>
-          <div className="mt-0.5 line-clamp-3 text-[13px] font-medium leading-snug hover:text-metier-orange">
+          {/* Name */}
+          <div className="line-clamp-2 text-[13px] font-medium leading-snug hover:text-metier-orange">
             {project.project_name_th}
           </div>
-          <div className="mt-1.5 flex items-center justify-between gap-2">
+          {/* Footer: dept + priority + comments */}
+          <div className="mt-1 flex items-center justify-between gap-2">
             <span className="truncate text-[11px] text-[color:var(--color-muted)]">
               {project.responsible_department || "—"}
             </span>
-            <span className="shrink-0 text-[12px] font-bold tabular-nums">
-              {formatBahtCompact(project.total_budget || 0)}
-            </span>
+            <div className="flex shrink-0 items-center gap-1">
+              {meta?.priority && (
+                <span
+                  className="text-[10px] font-bold"
+                  style={{ color: pColor! }}
+                  title={`Priority: ${priorityLabel(meta.priority)}`}
+                >
+                  {meta.priority === "urgent" && "🔥"}
+                  {meta.priority === "high" && "↑"}
+                  {meta.priority === "medium" && "—"}
+                  {meta.priority === "low" && "↓"}
+                </span>
+              )}
+              {commentsN > 0 && (
+                <span
+                  className="inline-flex items-center gap-0.5 text-[10px] text-[color:var(--color-muted)]"
+                  title={`${commentsN} comments`}
+                >
+                  <MessageSquare className="h-2.5 w-2.5" />
+                  {commentsN}
+                </span>
+              )}
+            </div>
           </div>
-          <YearStripCompact project={project} />
         </button>
-      </div>
-
-      {/* Urgency / schedule pill */}
-      <div className="mt-2 flex flex-wrap items-center gap-1">
-        <Badge
-          variant="outline"
-          className="text-[10px] font-semibold"
-          style={{ borderColor: stateColor, color: stateColor }}
-        >
-          {schedule.state === "late" && `⚠ ${STATE_LABEL.late}`}
-          {schedule.state === "due_soon" && `⏰ ${STATE_LABEL.due_soon}`}
-          {schedule.state === "on_track" && `✓ ${STATE_LABEL.on_track}`}
-          {schedule.state === "ahead" && `↑ ${STATE_LABEL.ahead}`}
-          {schedule.state === "not_started" && `· ${STATE_LABEL.not_started}`}
-          {schedule.state === "done" && `✓ ${STATE_LABEL.done}`}
-        </Badge>
-        {meta?.priority && (
-          <Badge
-            variant="outline"
-            className="px-1 py-0 text-[9.5px] font-semibold"
-            style={{ borderColor: pColor!, color: pColor! }}
-          >
-            {priorityLabel(meta.priority)}
-          </Badge>
-        )}
-        {commentsN > 0 && (
-          <Badge variant="muted" className="px-1 py-0 text-[9.5px]">
-            <MessageSquare className="mr-0.5 h-2.5 w-2.5" />
-            {commentsN}
-          </Badge>
-        )}
-      </div>
-
-      {/* Quick status pills */}
-      <div className="mt-2 flex flex-wrap gap-1">
-        {PROJECT_STATUSES.map((s) => (
-          <button
-            key={s}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectStatus(s);
-            }}
-            className={cn(
-              "rounded-full px-1.5 py-0.5 text-[10px] transition-colors",
-              s === currentStatus
-                ? "text-white"
-                : "bg-[color:var(--color-subtle)] text-[color:var(--color-muted-fg)] hover:bg-[color:var(--color-subtle)]/80",
-            )}
-            style={s === currentStatus ? { background: color } : undefined}
-            title={`เลื่อนไป "${s}"`}
-          >
-            {short(s)}
-          </button>
-        ))}
       </div>
     </div>
   );
@@ -683,8 +725,10 @@ function DetailDrawer({
   comments,
   meta,
   confirm,
+  workflow,
   currentStatus,
   onSelectStatus,
+  onSetWorkflow,
   onAddComment,
   onRemoveComment,
   onClose,
@@ -695,8 +739,10 @@ function DetailDrawer({
   comments: Comment[];
   meta?: ProjectMeta;
   confirm?: ConfirmRecord;
+  workflow: WorkflowState;
   currentStatus: ProjectStatus;
   onSelectStatus: (s: ProjectStatus) => void;
+  onSetWorkflow: (w: WorkflowState) => void;
   onAddComment: (body: string, author: string) => void;
   onRemoveComment: (cid: string) => void;
   onClose: () => void;
@@ -802,6 +848,34 @@ function DetailDrawer({
                 )}
               >
                 {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Workflow sub-status */}
+        <div>
+          <div className="mb-1.5 text-[11px] text-[color:var(--color-muted)]">
+            สถานะการทำงาน (ใน phase นี้)
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {WORKFLOW_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                onClick={() => onSetWorkflow(o.value)}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                  workflow === o.value
+                    ? "text-white"
+                    : "text-[color:var(--color-muted-fg)] hover:text-fg",
+                )}
+                style={
+                  workflow === o.value
+                    ? { background: o.color, borderColor: o.color }
+                    : { borderColor: o.color, color: o.color }
+                }
+              >
+                {o.icon} {o.label}
               </button>
             ))}
           </div>
