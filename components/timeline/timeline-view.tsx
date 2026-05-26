@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarClock, CheckCircle2, ChevronRight, Flag } from "lucide-react";
+import { CalendarClock, CheckCircle2, ChevronRight, Flag, Search, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/kpi-card";
 import { YearBudgetStrip } from "@/components/year-budget-strip";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
@@ -12,6 +14,8 @@ import { useSyncedState } from "@/lib/shared-state";
 import type { ProjectRecord } from "@/types/db";
 import {
   GROUP_COLOR,
+  METIER_GROUPS,
+  MUNICIPAL_GROUPS,
   getMainGroup,
   type OverrideMap,
 } from "@/lib/data/metier-taxonomy";
@@ -61,10 +65,87 @@ export function TimelineView({ projects }: { projects: ProjectRecord[] }) {
   const [confirmMap] = useSyncedState<Record<string, ConfirmRecord>>(CONFIRM_KEY, {});
   const [overrides] = useSyncedState<OverrideMap>(GROUP_OVERRIDES_KEY, {});
 
-  const items = useMemo(() => {
+  const allItems = useMemo(() => {
     const set = new Set(selectedIds);
     return projects.filter((p) => set.has(p.master_project_id));
   }, [projects, selectedIds]);
+
+  // Filter UI state — every chart/bucket downstream reads `items` so flipping
+  // a chip immediately updates the load chart, quarter columns, and KPIs.
+  const [q, setQ] = useState("");
+  const [selectedMains, setSelectedMains] = useState<Set<string>>(new Set());
+  const [selectedPriorities, setSelectedPriorities] = useState<Set<Priority>>(new Set());
+  const [selectedYears, setSelectedYears] = useState<Set<2569 | 2570>>(new Set());
+  const [confirmedOnly, setConfirmedOnly] = useState<"all" | "confirmed" | "pending">(
+    "all",
+  );
+  const [hideUnscheduled, setHideUnscheduled] = useState(false);
+
+  const items = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return allItems.filter((p) => {
+      const meta = metaMap[p.master_project_id];
+      const cf = confirmMap[p.master_project_id];
+      if (selectedMains.size && !selectedMains.has(getMainGroup(p, overrides))) {
+        return false;
+      }
+      if (selectedPriorities.size && !selectedPriorities.has(meta?.priority ?? ("" as Priority))) {
+        return false;
+      }
+      if (selectedYears.size) {
+        // Year filter: project's start_q must land in one of the selected years
+        const yr =
+          meta?.start_q?.startsWith("2570") ? 2570
+            : meta?.start_q?.startsWith("2569") ? 2569
+            : null;
+        if (yr == null || !selectedYears.has(yr as 2569 | 2570)) return false;
+      }
+      if (confirmedOnly === "confirmed" && !cf?.confirmed) return false;
+      if (confirmedOnly === "pending" && cf?.confirmed) return false;
+      if (hideUnscheduled && !meta?.start_q) return false;
+      if (needle) {
+        const hay =
+          `${p.project_name_th ?? ""} ${p.responsible_department ?? ""}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [
+    allItems,
+    metaMap,
+    confirmMap,
+    overrides,
+    q,
+    selectedMains,
+    selectedPriorities,
+    selectedYears,
+    confirmedOnly,
+    hideUnscheduled,
+  ]);
+
+  const filtersActive =
+    q !== "" ||
+    selectedMains.size > 0 ||
+    selectedPriorities.size > 0 ||
+    selectedYears.size > 0 ||
+    confirmedOnly !== "all" ||
+    hideUnscheduled;
+
+  const toggleSet = <T,>(set: Set<T>, value: T, setter: (s: Set<T>) => void) => {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    setter(next);
+  };
+
+  const resetFilters = () => {
+    setQ("");
+    setSelectedMains(new Set());
+    setSelectedPriorities(new Set());
+    setSelectedYears(new Set());
+    setConfirmedOnly("all");
+    setHideUnscheduled(false);
+  };
 
   // Bucket into quarters; cards without a start_q go in "unscheduled".
   const buckets = useMemo(() => {
@@ -137,7 +218,7 @@ export function TimelineView({ projects }: { projects: ProjectRecord[] }) {
     );
   }
 
-  if (items.length === 0) {
+  if (allItems.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-[color:var(--color-border)] p-12 text-center">
         <CalendarClock className="mx-auto mb-3 h-10 w-10 text-[color:var(--color-muted)]" />
@@ -194,7 +275,110 @@ export function TimelineView({ projects }: { projects: ProjectRecord[] }) {
         />
       </motion.div>
 
-      <YearBudgetStrip projects={items} title="งบประมาณตามปี (โครงการที่เลือก)" />
+      <YearBudgetStrip projects={items} title="งบประมาณตามปี (หลังกรอง)" />
+
+      {/* Filter toolbar */}
+      <Card>
+        <CardContent className="space-y-3 pt-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[240px] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted)]" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="ค้นหา ชื่อโครงการ / หน่วยงาน..."
+                className="pl-8"
+              />
+            </div>
+            <div className="text-[12px] text-[color:var(--color-muted-fg)]">
+              แสดง{" "}
+              <span className="font-bold text-fg tabular-nums">
+                {items.length.toLocaleString("th-TH")}
+              </span>{" "}
+              / {allItems.length.toLocaleString("th-TH")} โครงการ
+            </div>
+            {filtersActive && (
+              <Button size="sm" variant="ghost" onClick={resetFilters}>
+                <X className="h-3.5 w-3.5" /> ล้าง
+              </Button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-[12px]">
+            <span className="text-[color:var(--color-muted-fg)]">ปี:</span>
+            {([2569, 2570] as const).map((y) => (
+              <TFilterChip
+                key={y}
+                active={selectedYears.has(y)}
+                onClick={() => toggleSet(selectedYears, y, setSelectedYears)}
+              >
+                {y}
+              </TFilterChip>
+            ))}
+
+            <span className="ml-3 text-[color:var(--color-muted-fg)]">สถานะ:</span>
+            {(
+              [
+                ["all", "ทั้งหมด"],
+                ["confirmed", "ยืนยันแล้ว"],
+                ["pending", "ยังไม่ยืนยัน"],
+              ] as const
+            ).map(([k, label]) => (
+              <TFilterChip
+                key={k}
+                active={confirmedOnly === k}
+                onClick={() => setConfirmedOnly(k)}
+              >
+                {label}
+              </TFilterChip>
+            ))}
+
+            <span className="ml-3 text-[color:var(--color-muted-fg)]">Priority:</span>
+            {(
+              [
+                ["urgent", "🔥 Urgent"],
+                ["high", "↑ High"],
+                ["medium", "— Medium"],
+                ["low", "↓ Low"],
+              ] as const
+            ).map(([k, label]) => (
+              <TFilterChip
+                key={k}
+                color={priorityColor(k as Priority)}
+                active={selectedPriorities.has(k as Priority)}
+                onClick={() =>
+                  toggleSet(selectedPriorities, k as Priority, setSelectedPriorities)
+                }
+              >
+                {label}
+              </TFilterChip>
+            ))}
+
+            <span className="ml-3 text-[color:var(--color-muted-fg)]">
+              <TFilterChip
+                active={hideUnscheduled}
+                onClick={() => setHideUnscheduled((x) => !x)}
+              >
+                ซ่อน "ยังไม่ตั้งไตรมาส"
+              </TFilterChip>
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+            <span className="text-[color:var(--color-muted-fg)]">Main Group:</span>
+            {[...METIER_GROUPS, ...MUNICIPAL_GROUPS].map((g) => (
+              <TFilterChip
+                key={g}
+                color={GROUP_COLOR[g]}
+                active={selectedMains.has(g)}
+                onClick={() => toggleSet(selectedMains, g, setSelectedMains)}
+              >
+                {g}
+              </TFilterChip>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quarter load bar */}
       <Card>
@@ -302,6 +486,39 @@ export function TimelineView({ projects }: { projects: ProjectRecord[] }) {
         )}
       </div>
     </div>
+  );
+}
+
+function TFilterChip({
+  active,
+  color,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  color?: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-2.5 py-1 text-[11px] transition-all",
+        active && !color && "border-fg bg-fg text-white",
+        !active &&
+          "border-[color:var(--color-border)] text-[color:var(--color-muted-fg)] hover:text-fg",
+      )}
+      style={
+        active && color
+          ? { background: color, borderColor: color, color: "white" }
+          : !active && color
+            ? { borderColor: color, color }
+            : undefined
+      }
+    >
+      {children}
+    </button>
   );
 }
 
