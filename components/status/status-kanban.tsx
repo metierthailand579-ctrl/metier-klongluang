@@ -25,7 +25,13 @@ import { KpiCard } from "@/components/kpi-card";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
 import { useLocalStorage } from "@/lib/storage";
 import { useSyncedState } from "@/lib/shared-state";
-import { PROJECT_STATUSES, type ProjectStatus } from "@/types/db";
+import {
+  LEGACY_STATUS_MAP,
+  PROJECT_STATUSES,
+  STATUS_COLUMNS,
+  type ProjectStatus,
+  type StatusColumn,
+} from "@/types/db";
 import type { ProjectRecord } from "@/types/db";
 import {
   DEFAULT_DURATIONS,
@@ -67,11 +73,22 @@ type CommentMap = Record<string, Comment[]>;
 
 const COLUMN_COLORS: Record<ProjectStatus, string> = {
   "ร่าง TOR": "#64748b",
-  "เปิดโครงการ": "#0ea5e9",
+  "ตรวจ TOR": "#0891b2",
+  "แก้ TOR": "#0ea5e9",
+  "รอเปิดโครงการ": "#7c3aed",
+  "โครงการเปิด": "#a855f7",
   "ยื่นโครงการ": "#f59e0b",
-  "กำลังดำเนินงาน": "#ff5008",
-  "เสร็จสิ้น": "#10b981",
+  "รอประกาศผล": "#fbbf24",
+  "ดำเนินงาน": "#ff5008",
+  "ส่งมอบเสร็จสิ้น": "#10b981",
 };
+
+// Promote any pre-rework status values (5-state schema) to the new 9-state
+// schema so existing user data keeps working.
+function migrateStatus(s: string): ProjectStatus {
+  if (PROJECT_STATUSES.includes(s as ProjectStatus)) return s as ProjectStatus;
+  return LEGACY_STATUS_MAP[s] ?? "ร่าง TOR";
+}
 
 export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
   const [selectedIds, , hydrated1] = useSyncedState<string[]>(SELECTED_KEY, []);
@@ -102,7 +119,8 @@ export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
 
   const currentStatus = (pid: string): ProjectStatus => {
     const history = board[pid] ?? [];
-    return history.length ? history[history.length - 1].status : "ร่าง TOR";
+    if (!history.length) return "ร่าง TOR";
+    return migrateStatus(history[history.length - 1].status);
   };
 
   const moveTo = (pid: string, status: ProjectStatus) => {
@@ -132,13 +150,9 @@ export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
   }, [confirmedItems, metaMap, durations, board, today]);
 
   const columns = useMemo(() => {
-    const buckets: Record<ProjectStatus, ProjectRecord[]> = {
-      "ร่าง TOR": [],
-      "เปิดโครงการ": [],
-      "ยื่นโครงการ": [],
-      "กำลังดำเนินงาน": [],
-      "เสร็จสิ้น": [],
-    };
+    const buckets = Object.fromEntries(
+      PROJECT_STATUSES.map((s) => [s, [] as ProjectRecord[]]),
+    ) as Record<ProjectStatus, ProjectRecord[]>;
     for (const p of confirmedItems) {
       buckets[currentStatus(p.master_project_id)].push(p);
     }
@@ -158,7 +172,7 @@ export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
       total: t,
       lateCount,
       dueSoonCount,
-      doneCount: columns["เสร็จสิ้น"].length,
+      doneCount: columns["ส่งมอบเสร็จสิ้น"].length,
     };
   }, [confirmedItems, scheduleMap, columns]);
 
@@ -254,9 +268,11 @@ export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
           <span className="text-[color:var(--color-muted-fg)]">
             สถานะคำนวณจาก <strong className="text-fg">Start Q</strong> (หน้า 6) +
           </span>
-          <span className="font-mono text-[12px] text-fg">
-            ร่าง {durations["ร่าง TOR"]}d · เปิด {durations["เปิดโครงการ"]}d · ยื่น{" "}
-            {durations["ยื่นโครงการ"]}d · ดำเนิน {durations["กำลังดำเนินงาน"]}d
+          <span className="font-mono text-[11px] text-fg">
+            ร่าง {durations["ร่าง TOR"]}d · ตรวจ {durations["ตรวจ TOR"]}d · แก้{" "}
+            {durations["แก้ TOR"]}d · รอเปิด {durations["รอเปิดโครงการ"]}d · เปิด{" "}
+            {durations["โครงการเปิด"]}d · ยื่น {durations["ยื่นโครงการ"]}d · รอประกาศ{" "}
+            {durations["รอประกาศผล"]}d · ดำเนิน {durations["ดำเนินงาน"]}d
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -290,14 +306,13 @@ export function StatusKanban({ projects }: { projects: ProjectRecord[] }) {
         )}
       </AnimatePresence>
 
-      {/* Board */}
-      <div className="grid gap-3 lg:grid-cols-5">
-        {PROJECT_STATUSES.map((status) => (
-          <Column
-            key={status}
-            status={status}
-            color={COLUMN_COLORS[status]}
-            items={columns[status]}
+      {/* Board — 6 columns; some columns stack 2 sub-states (top/bottom) */}
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {STATUS_COLUMNS.map((col) => (
+          <ColumnGroup
+            key={col.label}
+            column={col}
+            columns={columns}
             currentStatus={currentStatus}
             scheduleMap={scheduleMap}
             metaMap={metaMap}
@@ -389,10 +404,74 @@ function SettingsPanel({
   );
 }
 
-function Column({
+function ColumnGroup({
+  column,
+  columns,
+  currentStatus,
+  scheduleMap,
+  metaMap,
+  commentsCount,
+  onMove,
+  onOpenDetail,
+}: {
+  column: StatusColumn;
+  columns: Record<ProjectStatus, ProjectRecord[]>;
+  currentStatus: (pid: string) => ProjectStatus;
+  scheduleMap: Map<string, ScheduleInfo>;
+  metaMap: Record<string, ProjectMeta>;
+  commentsCount: (pid: string) => number;
+  onMove: (pid: string, s: ProjectStatus) => void;
+  onOpenDetail: (pid: string) => void;
+}) {
+  const total = column.statuses.reduce(
+    (n, s) => n + (columns[s]?.length ?? 0),
+    0,
+  );
+  const headerColor = COLUMN_COLORS[column.statuses[0]];
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-[color:var(--color-border)] bg-white">
+      <div
+        className="flex items-center justify-between gap-2 border-b border-[color:var(--color-border)] px-3 py-2"
+        style={{ background: `${headerColor}10` }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full" style={{ background: headerColor }} />
+          <span className="text-[13px] font-bold">{column.label}</span>
+        </div>
+        <Badge variant="muted">{total}</Badge>
+      </div>
+      <div className="flex flex-1 flex-col divide-y divide-[color:var(--color-border)]">
+        {column.statuses.map((status, idx) => (
+          <SubColumn
+            key={status}
+            status={status}
+            color={COLUMN_COLORS[status]}
+            items={columns[status] ?? []}
+            position={
+              column.statuses.length === 1
+                ? "only"
+                : idx === 0
+                  ? "top"
+                  : "bottom"
+            }
+            currentStatus={currentStatus}
+            scheduleMap={scheduleMap}
+            metaMap={metaMap}
+            commentsCount={commentsCount}
+            onMove={onMove}
+            onOpenDetail={onOpenDetail}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SubColumn({
   status,
   color,
   items,
+  position,
   currentStatus,
   scheduleMap,
   metaMap,
@@ -403,6 +482,7 @@ function Column({
   status: ProjectStatus;
   color: string;
   items: ProjectRecord[];
+  position: "only" | "top" | "bottom";
   currentStatus: (pid: string) => ProjectStatus;
   scheduleMap: Map<string, ScheduleInfo>;
   metaMap: Record<string, ProjectMeta>;
@@ -425,20 +505,34 @@ function Column({
         if (pid) onMove(pid, status);
       }}
       className={cn(
-        "flex flex-col rounded-xl border bg-white transition-colors",
-        over
-          ? "border-metier-orange ring-2 ring-metier-orange/20"
-          : "border-[color:var(--color-border)]",
+        "flex flex-1 flex-col transition-colors",
+        over && "bg-metier-orange/[0.06] ring-1 ring-inset ring-metier-orange/30",
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-[color:var(--color-border)] px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-          <span className="text-[14px] font-medium">{status}</span>
+      {position !== "only" && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: color }}
+            />
+            <span className="text-[11px] font-semibold" style={{ color }}>
+              {position === "top" ? "▲ " : "▼ "}
+              {status}
+            </span>
+          </div>
+          <span className="text-[10px] tabular-nums text-[color:var(--color-muted)]">
+            {items.length}
+          </span>
         </div>
-        <Badge variant="muted">{items.length}</Badge>
-      </div>
-      <div className="min-h-[120px] flex-1 space-y-2 p-2">
+      )}
+      <div
+        className={cn(
+          "flex-1 space-y-2 p-2",
+          position === "only" && "min-h-[120px]",
+          position !== "only" && "min-h-[80px]",
+        )}
+      >
         <AnimatePresence initial={false}>
           {items.map((p) => (
             <motion.div
@@ -463,7 +557,7 @@ function Column({
           ))}
         </AnimatePresence>
         {items.length === 0 && (
-          <div className="flex h-full min-h-[80px] items-center justify-center rounded-md border border-dashed border-[color:var(--color-border)] text-[12px] text-[color:var(--color-muted)]">
+          <div className="flex h-full min-h-[60px] items-center justify-center rounded-md border border-dashed border-[color:var(--color-border)] text-[11px] text-[color:var(--color-muted)]">
             ว่าง
           </div>
         )}
@@ -910,13 +1004,21 @@ function short(s: ProjectStatus): string {
   switch (s) {
     case "ร่าง TOR":
       return "ร่าง";
-    case "เปิดโครงการ":
+    case "ตรวจ TOR":
+      return "ตรวจ";
+    case "แก้ TOR":
+      return "แก้";
+    case "รอเปิดโครงการ":
+      return "รอเปิด";
+    case "โครงการเปิด":
       return "เปิด";
     case "ยื่นโครงการ":
       return "ยื่น";
-    case "กำลังดำเนินงาน":
-      return "ทำ";
-    case "เสร็จสิ้น":
+    case "รอประกาศผล":
+      return "รอผล";
+    case "ดำเนินงาน":
+      return "ดำเนิน";
+    case "ส่งมอบเสร็จสิ้น":
       return "เสร็จ";
   }
 }

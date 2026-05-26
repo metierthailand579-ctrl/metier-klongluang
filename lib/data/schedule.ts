@@ -2,16 +2,25 @@ import { PROJECT_STATUSES, type ProjectStatus } from "@/types/db";
 
 export type PhaseDurations = {
   "ร่าง TOR": number;
-  "เปิดโครงการ": number;
+  "ตรวจ TOR": number;
+  "แก้ TOR": number;
+  "รอเปิดโครงการ": number;
+  "โครงการเปิด": number;
   "ยื่นโครงการ": number;
-  "กำลังดำเนินงาน": number;
+  "รอประกาศผล": number;
+  "ดำเนินงาน": number;
+  // "ส่งมอบเสร็จสิ้น" is the terminal state — no duration
 };
 
 export const DEFAULT_DURATIONS: PhaseDurations = {
   "ร่าง TOR": 14,
-  "เปิดโครงการ": 7,
-  "ยื่นโครงการ": 30,
-  "กำลังดำเนินงาน": 60,
+  "ตรวจ TOR": 5,
+  "แก้ TOR": 7,
+  "รอเปิดโครงการ": 3,
+  "โครงการเปิด": 1,
+  "ยื่นโครงการ": 14,
+  "รอประกาศผล": 21,
+  "ดำเนินงาน": 60,
 };
 
 // Parse "2569-Q1" → Date (calendar year convention: Q1=Jan-Mar, Q2=Apr-Jun,
@@ -75,7 +84,8 @@ export function scheduleFor(
   const phases: Array<{ status: ProjectStatus; endDay: number; length: number }> = [];
   let cumulative = 0;
   for (const p of PROJECT_STATUSES) {
-    const len = p === "เสร็จสิ้น" ? Infinity : (durations[p as keyof PhaseDurations] ?? 0);
+    const len =
+      p === "ส่งมอบเสร็จสิ้น" ? Infinity : (durations[p as keyof PhaseDurations] ?? 0);
     cumulative += len;
     phases.push({ status: p, endDay: cumulative, length: len });
   }
@@ -89,7 +99,7 @@ export function scheduleFor(
     }
     expectedIndex = i;
   }
-  if (currentStatus === "เสร็จสิ้น") {
+  if (currentStatus === "ส่งมอบเสร็จสิ้น") {
     return {
       startDate,
       daysSinceStart,

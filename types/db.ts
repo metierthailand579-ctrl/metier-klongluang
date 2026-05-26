@@ -61,15 +61,48 @@ export type Selection = {
 
 export type ProjectStatus =
   | "ร่าง TOR"
-  | "เปิดโครงการ"
+  | "ตรวจ TOR"
+  | "แก้ TOR"
+  | "รอเปิดโครงการ"
+  | "โครงการเปิด"
   | "ยื่นโครงการ"
-  | "กำลังดำเนินงาน"
-  | "เสร็จสิ้น";
+  | "รอประกาศผล"
+  | "ดำเนินงาน"
+  | "ส่งมอบเสร็จสิ้น";
 
 export const PROJECT_STATUSES: ProjectStatus[] = [
   "ร่าง TOR",
-  "เปิดโครงการ",
+  "ตรวจ TOR",
+  "แก้ TOR",
+  "รอเปิดโครงการ",
+  "โครงการเปิด",
   "ยื่นโครงการ",
-  "กำลังดำเนินงาน",
-  "เสร็จสิ้น",
+  "รอประกาศผล",
+  "ดำเนินงาน",
+  "ส่งมอบเสร็จสิ้น",
+];
+
+// Map old (pre-rework) status values from existing localStorage/Supabase data
+// onto the new 9-value schema. Applied at read time so we don't lose anyone's
+// in-progress work.
+export const LEGACY_STATUS_MAP: Record<string, ProjectStatus> = {
+  "ร่าง TOR": "ร่าง TOR",
+  "เปิดโครงการ": "รอเปิดโครงการ",
+  "ยื่นโครงการ": "ยื่นโครงการ",
+  "กำลังดำเนินงาน": "ดำเนินงาน",
+  "เสร็จสิ้น": "ส่งมอบเสร็จสิ้น",
+};
+
+// Visual grouping for the kanban — some columns stack two sub-states.
+export type StatusColumn = {
+  label: string;
+  statuses: ProjectStatus[];
+};
+export const STATUS_COLUMNS: StatusColumn[] = [
+  { label: "ร่าง TOR", statuses: ["ร่าง TOR"] },
+  { label: "ตรวจ / แก้ TOR", statuses: ["ตรวจ TOR", "แก้ TOR"] },
+  { label: "เปิดโครงการ", statuses: ["รอเปิดโครงการ", "โครงการเปิด"] },
+  { label: "ยื่น / รอประกาศผล", statuses: ["ยื่นโครงการ", "รอประกาศผล"] },
+  { label: "ดำเนินงาน", statuses: ["ดำเนินงาน"] },
+  { label: "ส่งมอบเสร็จสิ้น", statuses: ["ส่งมอบเสร็จสิ้น"] },
 ];
