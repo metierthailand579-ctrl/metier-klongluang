@@ -30,14 +30,19 @@ export function useSyncedState<T>(
     ReturnType<typeof createSupabaseBrowserClient>["channel"]
   > | null>(null);
 
-  // Read from localStorage first (instant), then from Supabase (authoritative)
+  // Read from localStorage first (instant), then from Supabase (authoritative).
+  // If Supabase has no row for this key BUT localStorage has a non-default
+  // value, push the local value UP so other browsers can see it. This handles
+  // the "I ticked things before sharing was wired" case automatically.
   useEffect(() => {
     let cancelled = false;
+    let localValue: T | undefined;
     try {
       const raw = window.localStorage.getItem(key);
       if (raw != null) {
         try {
-          setValue(JSON.parse(raw) as T);
+          localValue = JSON.parse(raw) as T;
+          setValue(localValue);
         } catch {
           // ignore
         }
@@ -54,15 +59,37 @@ export function useSyncedState<T>(
           .eq("key", key)
           .maybeSingle();
         if (cancelled) return;
-        if (!error && data?.value !== undefined && data.value !== null) {
-          const serialized = JSON.stringify(data.value);
+
+        const supabaseHasRow =
+          !error && data?.value !== undefined && data.value !== null;
+
+        if (supabaseHasRow) {
+          // Server wins — overlay onto local
+          const serialized = JSON.stringify(data!.value);
           if (serialized !== lastWriteRef.current) {
-            setValue(data.value as T);
+            setValue(data!.value as T);
             try {
               window.localStorage.setItem(key, serialized);
             } catch {
               /* ignore */
             }
+          }
+        } else if (
+          localValue !== undefined &&
+          JSON.stringify(localValue) !== JSON.stringify(initial)
+        ) {
+          // Migration scenario: localStorage has user's work but the cloud
+          // row doesn't exist yet → push it up so the team can see it.
+          try {
+            const serialized = JSON.stringify(localValue);
+            lastWriteRef.current = serialized;
+            await supabase.from("app_state").upsert({
+              key,
+              value: localValue as unknown as object,
+              updated_at: new Date().toISOString(),
+            });
+          } catch {
+            // Push failed — localStorage still has it, no data loss
           }
         }
       } catch {
@@ -74,6 +101,8 @@ export function useSyncedState<T>(
     return () => {
       cancelled = true;
     };
+    // initial is intentionally not in deps — we only want this on mount per key
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   // Realtime subscription — other browsers' updates flow in
