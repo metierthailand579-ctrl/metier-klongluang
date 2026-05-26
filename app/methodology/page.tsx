@@ -3,99 +3,108 @@ import { getAllHistory } from "@/lib/data/history";
 import { summarize } from "@/lib/data/stats";
 import { AnimatedCounter } from "@/components/methodology/animated-counter";
 import { StepCard, type Step } from "@/components/methodology/step-card";
-import { formatBahtCompact } from "@/lib/utils";
+import { StepsHeader } from "@/components/methodology/steps-header";
+import { PipelineFlow } from "@/components/methodology/pipeline-flow";
+import { formatBaht } from "@/lib/utils";
 
 export const metadata = { title: "วิธีทำ · คลองหลวง 2026" };
 
 const STEPS: Step[] = [
   {
     id: "S1",
-    title: "File Inventory",
-    summary: "เปิดและจดบัญชีไฟล์ต้นฉบับทั้งหมด: 6 PDF (764 หน้า) + 4 Excel + เอกสารอ้างอิง",
+    title: "รวบรวมไฟล์ต้นฉบับทั้งหมด",
+    summary:
+      "เปิดและจดบัญชีเอกสารต้นฉบับ — PDF แผนพัฒนาท้องถิ่น 6 ไฟล์ (รวม 764 หน้า) + Excel งบประมาณ 4 ไฟล์",
     status: "done",
     bullets: [
-      "PDF-01..06: แผนพัฒนาท้องถิ่นฯ ฉบับเปลี่ยนแปลง/เพิ่มเติม ปี 2568–2569",
-      "XLSX-01..03: ตารางที่ผู้ใช้สกัดไว้ก่อนหน้า — ใช้เทียบความถูกต้อง",
-      "XLSX-04: บันทึกจัดซื้อจัดจ้างจริง 1,449 รายการ ปี 2567–2569 (ไม่ใช่แผน)",
+      "PDF: แผนพัฒนาท้องถิ่นฯ ปี 2566–2570 รวมฉบับเปลี่ยนแปลง/เพิ่มเติม",
+      "Excel: ตารางที่ทีมเทศบาลสกัดข้อมูลไว้แล้ว ใช้เทียบความถูกต้อง",
+      "Excel: บันทึกจัดซื้อจัดจ้างจริง 1,449 รายการ (ของจริง ไม่ใช่แผน) ใช้เป็น reference",
     ],
   },
   {
     id: "S2",
-    title: "Duplicate / Overlap Detection",
-    summary: "ตรวจซ้ำข้ามไฟล์ พบโครงการคู่ขนาน 6 กลุ่ม + เจอว่า XLSX-04 เป็น procurement records ไม่ใช่ planned projects",
+    title: "เช็คโครงการซ้ำกันก่อน",
+    summary:
+      "ตรวจว่าโครงการเดียวกันถูกใส่ในหลายไฟล์ไหม — เจอ 6 กลุ่มที่ซ้ำกัน และพบว่าไฟล์งบประมาณจริงคือคนละชุดกับแผน",
     status: "done",
   },
   {
     id: "S3",
-    title: "Review Existing Excel",
-    summary: "Review schema 3 ไฟล์ที่ผู้ใช้สกัดไว้ — พบ schema 2 รุ่น + sample verification 3/3 PASS",
+    title: "อ่าน Excel ที่ทีมเทศบาลสกัดไว้",
+    summary:
+      "ตรวจโครงสร้างข้อมูลที่ทีมเทศบาลสรุปไว้ก่อน — verify 3 ตัวอย่าง ผ่านทั้ง 3 → เข้าใจตรงกัน",
     status: "done",
   },
   {
     id: "S4",
-    title: "Master Schema (57 fields)",
-    summary: "ออกแบบ schema ครอบคลุม 13 กลุ่ม (A-M): ID/Source, Identity, Description, Budget, Procurement, QA, Change Tracking, Metier Fit, Selection, Historical Match, Category, Metier Service Area",
+    title: "ออกแบบโครงสร้างข้อมูลให้ครบทุกมุม",
+    summary:
+      "กำหนดว่าทุกโครงการต้องมีข้อมูลอะไรบ้าง — ชื่อ, งบ, ปีที่จะทำ, หน่วยงาน, ที่มา PDF, หน้าที่อ้างอิง, สาย Metier ฯลฯ รวม 57 ข้อมูลต่อโครงการ",
     status: "done",
-    meta: "57 fields × 13 groups",
+    meta: "57 ช่องข้อมูล / โครงการ",
   },
   {
     id: "S5",
-    title: "Document Extraction (v1)",
-    summary: "Multi-agent parallel extraction จาก 6 PDFs → 937 records (v1) — Claude vision เป็นหลัก + tesseract OCR backup",
+    title: "ดึงข้อมูลจาก PDF ทั้งหมดด้วย AI",
+    summary:
+      "อ่าน PDF อัตโนมัติด้วย Claude vision (รุ่นที่อ่านภาพได้) — รอบแรกได้ 937 โครงการ พร้อมเลขหน้าที่อ้างอิงกลับไฟล์ต้นทาง",
     status: "done",
   },
   {
     id: "S5b",
-    title: "Cross-check Fix + Metier Categorization",
-    summary: "แก้จุดที่ทีม cross-check Not Pass: PDF-04 +79 ครุภัณฑ์, PDF-03 v2 merge, PDF-05 unroll ครุภัณฑ์ → 1,333 records. เพิ่ม Metier service-area classification (4 areas) — เจอ 62 Metier-relevant",
+    title: "ตรวจสอบ + แตกครุภัณฑ์ที่ขาด",
+    summary:
+      "ทีม cross-check พบว่ามีครุภัณฑ์การแพทย์ที่ PDF รวบไว้เป็นรายการเดียว — แตกออกเป็น 311 รายการย่อย → รวมเป็น 1,333 โครงการ พร้อมจัดสายงาน Metier ครั้งแรก",
     status: "done",
-    bullets: [
-      "PDF-04: pull 79 ครุภัณฑ์ จาก XLSX-01 Equipment_Master",
-      "PDF-05: manual unroll ครุภัณฑ์การแพทย์ 12 → 311 line items",
-      "Classifier ตั้งต้น: keyword-based 4 areas + 9 sub-services",
-    ],
   },
   {
     id: "S5c",
-    title: "Re-classify NOT_APPLICABLE",
-    summary: "แบ่ง sub-group ของงานที่ไม่ใช่ Metier service ให้ละเอียดขึ้น — 114 records ที่เคยเป็น 'อื่นๆ' → 26 sub-categories ใหม่; พร้อม re-check Metier classifier เจอ +6 (วารสาร, แอปพลิเคชัน, เสียงไร้สาย)",
+    title: "จัดกลุ่มย่อยให้ละเอียดขึ้น",
+    summary:
+      "โครงการที่ไม่ใช่สายงาน Metier (ถนน คสล., สะพาน, ครุภัณฑ์) แบ่งเป็นกลุ่มย่อยให้ละเอียด เพื่อใช้ดู context ได้ — กลับมา re-check สาย Metier เจอเพิ่ม 6 ตัว (วารสาร, แอป, เสียงไร้สาย)",
     status: "done",
-    meta: "Metier 62 → 68",
   },
   {
     id: "S6",
-    title: "Merge & Reconciliation",
-    summary: "Cross-PDF duplicate detection + normalize ชื่อหน่วยงาน + re-sequence master_project_id (รอเริ่ม)",
+    title: "รวมข้อมูล + ทำให้สะอาด",
+    summary:
+      "เช็คโครงการซ้ำข้ามไฟล์ + ทำให้ชื่อหน่วยงานสะกดเหมือนกันทุกที่ + จัดเลข ID ใหม่ให้เรียง (รอเริ่ม)",
     status: "pending",
   },
   {
     id: "S7",
-    title: "Metier Fit Scoring & Selection",
-    summary: "ให้ score 1-10 + tier (high/medium/low) — ผู้ใช้คัดเลือกในหน้า /filter ของ web app",
+    title: "ทีม Metier ให้คะแนน + คัดเลือก",
+    summary:
+      "ทีม Metier ใช้หน้า ‘คัดเลือก’ ในเว็บนี้เพื่อให้คะแนน 1-10 + ตัดสินใจว่าจะยื่นโครงการไหน",
     status: "pending",
   },
   {
     id: "S8",
-    title: "Historical Comparison vs XLSX-04",
-    summary: "Fuzzy-match selected projects กับ 1,449 procurement records ปี 2568 → ระบุ TOR ที่ควร download",
+    title: "เทียบกับโครงการเก่าที่เทศบาลเคยจัดซื้อ",
+    summary:
+      "หาว่าโครงการที่เลือกไว้ คล้ายกับโครงการที่เทศบาลเคยจัดซื้อจัดจ้างจริงปี 2568 ตัวไหนบ้าง — เพื่อขอ TOR ฉบับเดิมมาดูเป็น reference",
     status: "pending",
   },
   {
     id: "S9",
-    title: "SOW / TOR Component Mapping",
-    summary: "Parse TOR ที่ download → แยก source-grounded SOW (จาก TOR จริง) vs inferred (จาก similarity)",
+    title: "อ่าน TOR เก่า → ร่าง SOW",
+    summary:
+      "Parse TOR ที่ download มา → ทำเป็นร่าง Scope of Work — แยกชัดว่าส่วนไหนมาจาก TOR จริง vs ส่วนไหน Metier ใส่เพิ่มเอง",
     status: "pending",
   },
   {
     id: "S10",
-    title: "Generate Final Deliverables",
-    summary: "D1 Excel master · D2 DOCX comparison report · D3 DOCX executive summary (Thai)",
+    title: "ส่งมอบ deliverables",
+    summary:
+      "ส่ง Excel หลัก (master) + รายงานเปรียบเทียบกับ TOR เก่า + executive summary ภาษาไทย",
     status: "pending",
   },
   {
     id: "S11",
-    title: "Final QA",
-    summary: "13-item checklist + Sheet 12_QA_Log: source grounding, conflicts preserved, ไม่ทราบข้อมูลในส่วนนี้, no chain-of-thought",
+    title: "ตรวจคุณภาพรอบสุดท้าย",
+    summary:
+      "เช็ค 13 ข้อก่อนส่ง: ทุกข้อมูลต้องอ้างที่มาได้ + ไม่มีการเดา/ประดิษฐ์ + ไม่มี chain-of-thought + ใช้คำว่า ‘ไม่ทราบข้อมูลในส่วนนี้’ ตามมาตรฐาน",
     status: "pending",
   },
 ];
@@ -103,7 +112,6 @@ const STEPS: Step[] = [
 export default function MethodologyPage() {
   const projects = getAllProjects();
   const metier = getMetierProjects();
-  const history = getAllHistory();
   const s = summarize(projects);
 
   return (
@@ -126,9 +134,13 @@ export default function MethodologyPage() {
             </span>
           </h1>
           <p className="mt-6 max-w-3xl text-[18px] font-light leading-relaxed text-[color:var(--color-muted-fg)]">
-            กระบวนการ 13 ขั้น (S1 → S11) วิเคราะห์เอกสารแผนพัฒนาท้องถิ่นเทศบาลเมืองคลองหลวง
-            พ.ศ. 2566–2570 จากเอกสารต้นฉบับ scan PDF ทั้งหมด 764 หน้า
-            แปลงเป็นข้อมูลที่มีโครงสร้าง พร้อมเทียบกับประวัติจัดซื้อจัดจ้างปี 2568
+            กระบวนการ <strong className="text-fg">13 ขั้น</strong> ตั้งแต่{" "}
+            <span className="font-mono">S1</span> ถึง{" "}
+            <span className="font-mono">S11</span> (มี{" "}
+            <span className="font-mono">S5b</span> /{" "}
+            <span className="font-mono">S5c</span> แตกระหว่างทาง) — เริ่มจากอ่าน PDF
+            ต้นฉบับ 764 หน้า แปลงเป็นข้อมูลที่มีโครงสร้าง จัดกลุ่ม คัดเลือกตามสายงาน
+            Metier แล้วเทียบกับประวัติจัดซื้อจัดจ้างปี 2568 เพื่อร่าง SOW
           </p>
 
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -136,24 +148,34 @@ export default function MethodologyPage() {
               label="โครงการในแผน"
               value={<AnimatedCounter to={projects.length} />}
               unit="รายการ"
-              hint="ครอบคลุม 6 PDF + 4 Excel"
+              hint="อ่านจาก PDF 6 ไฟล์ + Excel 4 ไฟล์"
             />
             <Stat
               label="งบประมาณรวม"
-              value={<AnimatedCounter to={Math.round(s.totalBudget / 1_000_000)} />}
-              unit="ล้านบาท"
-              hint={formatBahtCompact(s.totalBudget)}
+              value={
+                <AnimatedCounter
+                  to={s.totalBudget / 1_000_000_000}
+                  format="fixed2"
+                />
+              }
+              unit="พันล้านบาท"
+              hint={formatBaht(s.totalBudget) + " บาท"}
             />
             <Stat
-              label="Metier-relevant"
+              label="โครงการสาย Metier"
               value={<AnimatedCounter to={metier.length} />}
               unit="โครงการ"
               accent
               hint={`${(s.metierShare * 100).toFixed(1)}% ของทั้งหมด`}
             />
             <Stat
-              label="งบ Metier"
-              value={<AnimatedCounter to={Math.round(s.metierBudget / 1_000_000)} />}
+              label="งบสาย Metier"
+              value={
+                <AnimatedCounter
+                  to={s.metierBudget / 1_000_000}
+                  format="fixed1"
+                />
+              }
               unit="ล้านบาท"
               accent
               hint={`${(s.metierBudgetShare * 100).toFixed(1)}% ของงบรวม`}
@@ -162,74 +184,35 @@ export default function MethodologyPage() {
         </div>
       </section>
 
-      {/* Pipeline diagram (visual) */}
+      {/* Pipeline diagram — animated */}
       <section className="border-b border-[color:var(--color-border)] bg-[color:var(--color-subtle)]/40">
-        <div className="mx-auto max-w-[1440px] px-6 py-12">
-          <h2 className="mb-6 text-[24px] font-bold">Pipeline</h2>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
-            <PipelineStep n={1} title="PDF ต้นฉบับ" sub={`6 ไฟล์ · 764 หน้า`} />
-            <PipelineStep n={2} title="OCR + Vision" sub="Claude vision + tesseract Thai" />
-            <PipelineStep n={3} title="Extract" sub={`${projects.length.toLocaleString("th-TH")} records`} />
-            <PipelineStep n={4} title="Classify" sub="7 ยุทธศาสตร์ + 4 Metier areas" />
-            <PipelineStep n={5} title="Merge" sub="duplicate / pair detection" />
-            <PipelineStep n={6} title="Select + SOW" sub={`${metier.length} candidates`} highlight />
+        <div className="mx-auto max-w-[1440px] px-6 py-14">
+          <div className="mb-6 flex items-baseline justify-between gap-4">
+            <h2 className="text-[24px] font-bold">Pipeline ภาพรวม</h2>
+            <span className="text-[12px] text-[color:var(--color-muted)]">
+              6 ขั้นหลัก · ลำดับการไหลของข้อมูล
+            </span>
           </div>
-          <div className="mt-6 text-[13px] text-[color:var(--color-muted)]">
-            ทุก record อ้างอิงกลับไปยัง <code>source_pdf_file</code> +{" "}
-            <code>source_page</code> ได้ — ไม่มีการประดิษฐ์ข้อมูล (ใช้
-            <span className="font-medium"> "ไม่ทราบข้อมูลในส่วนนี้" </span>
-            เมื่อข้อมูลขาด)
+          <PipelineFlow totalRecords={projects.length} metierCount={metier.length} />
+          <div className="mt-8 rounded-md border border-[color:var(--color-border)] bg-white px-4 py-3 text-[13px] text-[color:var(--color-muted-fg)]">
+            ทุกโครงการอ้างกลับไปยังไฟล์ต้นฉบับ + เลขหน้าได้
+            (ไม่มีการประดิษฐ์ข้อมูล — ใช้คำว่า{" "}
+            <span className="font-medium text-fg">‘ไม่ทราบข้อมูลในส่วนนี้’</span>{" "}
+            เมื่อ source ไม่บอก)
           </div>
         </div>
       </section>
 
       {/* Steps timeline */}
       <section className="mx-auto max-w-[1100px] px-6 py-14">
-        <h2 className="mb-2 text-[24px] font-bold">13 ขั้นตอน (S1 → S11)</h2>
-        <p className="mb-10 max-w-2xl font-light text-[color:var(--color-muted-fg)]">
-          แต่ละขั้นมี <code>step_review_schema</code> เพื่อรอ approval จากผู้ใช้
-          ก่อน execute ขั้นถัดไป — ทำให้ไม่หลงไปทำสิ่งที่ผู้ใช้ไม่ต้องการ
-        </p>
-        <div className="relative">
-          <div className="absolute left-[19px] top-2 bottom-0 w-px bg-[color:var(--color-border)]" />
+        <StepsHeader steps={STEPS} />
+        <div className="relative mt-10">
+          <div className="absolute left-[23px] top-2 bottom-0 w-px bg-[color:var(--color-border)]" />
           <div className="space-y-2">
             {STEPS.map((step, i) => (
               <StepCard key={step.id} step={step} index={i} />
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Glossary */}
-      <section className="border-t border-[color:var(--color-border)] bg-[color:var(--color-subtle)]/40">
-        <div className="mx-auto max-w-[1100px] px-6 py-12">
-          <h2 className="mb-6 text-[24px] font-bold">ศัพท์ที่ใช้</h2>
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <GlossaryItem
-              term="Layer 1 / Layer 2"
-              def="Layer 1 = หมวดใหญ่ (เช่น 7 ยุทธศาสตร์, 4 Metier areas) · Layer 2 = sub-category"
-            />
-            <GlossaryItem
-              term="NOT_APPLICABLE"
-              def={`โครงการที่ไม่ตรงสาย Metier (1,265 รายการ — ส่วนใหญ่เป็นถนน คสล., ครุภัณฑ์การแพทย์, สะพาน) แต่ยังจัดกลุ่มย่อยให้เพื่อ context`}
-            />
-            <GlossaryItem
-              term="duplicate_group_id / pair_id"
-              def="เก็บโครงการที่ซ้ำกันข้ามไฟล์ (DUP-001..006) และคู่ ORIG/CHG (โครงการเดิม vs เปลี่ยนแปลง) ในไฟล์เดียวกัน"
-            />
-            <GlossaryItem
-              term="ไม่ทราบข้อมูลในส่วนนี้"
-              def="วลีเฉพาะที่ใช้เมื่อข้อมูลขาดจาก source — ไม่ใช่ ⁠null หรือ empty string เพื่อแยกจากความว่างปกติ"
-            />
-            <GlossaryItem
-              term="metier_fit_score / tier"
-              def="คะแนน 1-10 + ระดับ high/medium/low ที่ Metier ให้กับ candidate (กำหนดใน S7)"
-            />
-            <GlossaryItem
-              term={`procurement_history_2568 (${history.length.toLocaleString("th-TH")})`}
-              def="บันทึกจัดซื้อจัดจ้างจริงปี 2567–2569 (XLSX-04) ใช้เป็น reference เทียบกับ selected projects"
-            />
-          </dl>
         </div>
       </section>
     </div>
@@ -275,55 +258,6 @@ function Stat({
         )}
       </div>
       {hint && <div className="mt-2 text-[12px] text-[color:var(--color-muted)]">{hint}</div>}
-    </div>
-  );
-}
-
-function PipelineStep({
-  n,
-  title,
-  sub,
-  highlight = false,
-}: {
-  n: number;
-  title: string;
-  sub?: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={
-        "rounded-xl border p-4 transition-colors " +
-        (highlight
-          ? "border-metier-orange/40 bg-white"
-          : "border-[color:var(--color-border)] bg-white")
-      }
-    >
-      <div
-        className={
-          "mb-2 inline-flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold " +
-          (highlight
-            ? "bg-metier-orange text-white"
-            : "bg-[color:var(--color-subtle)] text-[color:var(--color-muted-fg)]")
-        }
-      >
-        {n}
-      </div>
-      <div className="font-bold leading-tight">{title}</div>
-      {sub && (
-        <div className="mt-1 text-[12px] text-[color:var(--color-muted)]">{sub}</div>
-      )}
-    </div>
-  );
-}
-
-function GlossaryItem({ term, def }: { term: string; def: string }) {
-  return (
-    <div className="rounded-lg border border-[color:var(--color-border)] bg-white p-4">
-      <dt className="text-[14px] font-bold">{term}</dt>
-      <dd className="mt-1 text-[13px] font-light leading-relaxed text-[color:var(--color-muted-fg)]">
-        {def}
-      </dd>
     </div>
   );
 }

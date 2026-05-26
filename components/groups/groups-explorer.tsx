@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
 import { ArrowRight, Sparkles, X } from "lucide-react";
@@ -16,14 +16,26 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
+import { useLocalStorage } from "@/lib/storage";
 import type { ProjectRecord } from "@/types/db";
+import {
+  ALL_MAIN_GROUPS,
+  METIER_GROUPS,
+  UNCLASSIFIED,
+  allSubsForMain,
+  getMainGroup,
+  getSubService,
+  isMetierGroup,
+  type OverrideMap,
+} from "@/lib/data/metier-taxonomy";
+import { GroupTagger } from "./group-tagger";
 
 type Metric = "budget" | "count" | "avg" | "max";
 type Dim =
+  | "metier_main_group"
+  | "metier_sub_service"
   | "work_category_layer1"
   | "work_category_layer2"
-  | "metier_service_area_layer1"
-  | "metier_service_area_layer2"
   | "responsible_department"
   | "source_pdf_file"
   | "first_planned_year"
@@ -32,10 +44,10 @@ type Dim =
   | "NONE";
 
 const DIM_LABEL: Record<Exclude<Dim, "NONE">, string> = {
-  work_category_layer1: "ยุทธศาสตร์ (Layer 1)",
-  work_category_layer2: "ประเภทงาน (Layer 2)",
-  metier_service_area_layer1: "Metier service area",
-  metier_service_area_layer2: "Metier sub-area",
+  metier_main_group: "Main Group (Metier + Municipal)",
+  metier_sub_service: "Sub-service",
+  work_category_layer1: "ยุทธศาสตร์ (Layer 1, ดิบ)",
+  work_category_layer2: "ประเภทงาน (Layer 2, ดิบ)",
   responsible_department: "หน่วยงาน",
   source_pdf_file: "ที่มา PDF",
   first_planned_year: "ปีเริ่ม",
@@ -56,7 +68,13 @@ const PALETTE = [
   "#4338ca", "#0e7490", "#a16207", "#dc2626", "#16a34a",
 ];
 
-function getValue(p: ProjectRecord, dim: Exclude<Dim, "NONE">): string {
+function getValue(
+  p: ProjectRecord,
+  dim: Exclude<Dim, "NONE">,
+  overrides?: OverrideMap,
+): string {
+  if (dim === "metier_main_group") return getMainGroup(p, overrides);
+  if (dim === "metier_sub_service") return getSubService(p, overrides);
   const v = p[dim as keyof ProjectRecord];
   if (v == null || v === "") return "(ไม่ระบุ)";
   return String(v);
@@ -82,34 +100,58 @@ function formatMetricValue(v: number, metric: Metric): string {
 }
 
 export function GroupsExplorer({ projects }: { projects: ProjectRecord[] }) {
-  const [primary, setPrimary] = useState<Exclude<Dim, "NONE">>("work_category_layer1");
-  const [secondary, setSecondary] = useState<Dim>("work_category_layer2");
-  const [metric, setMetric] = useState<Metric>("budget");
+  const [primary, setPrimary] = useState<Exclude<Dim, "NONE">>("metier_main_group");
+  const [secondary, setSecondary] = useState<Dim>("metier_sub_service");
+  const [metric, setMetric] = useState<Metric>("count");
   const [metierOnly, setMetierOnly] = useState(false);
   const [q, setQ] = useState("");
   const [activePrimary, setActivePrimary] = useState<string | null>(null);
+
+  // Manual classifications set in the tagger below. Persisted in localStorage.
+  const [overrides, setOverrides] = useLocalStorage<OverrideMap>(
+    "klongluang.groupOverrides.v1",
+    {},
+  );
 
   // pre-filter
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return projects.filter((p) => {
-      if (metierOnly && p.metier_service_area_layer1 === "NOT_APPLICABLE") return false;
+      if (metierOnly && !isMetierGroup(getMainGroup(p, overrides))) return false;
       if (needle) {
         const hay = `${p.project_name_th ?? ""} ${p.responsible_department ?? ""}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-  }, [projects, metierOnly, q]);
+  }, [projects, metierOnly, q, overrides]);
 
   // build buckets
   const buckets = useMemo(() => {
     type Inner = { name: string; values: number[]; budget: number };
     type Outer = { name: string; inner: Map<string, Inner>; values: number[]; budget: number };
     const outer = new Map<string, Outer>();
+
+    // Seed the canonical Metier + Municipal taxonomy so empty groups/sub-services
+    // still render (the user wants to see the whole catalog).
+    if (primary === "metier_main_group") {
+      const seeds = metierOnly ? METIER_GROUPS : ALL_MAIN_GROUPS;
+      for (const m of seeds) {
+        outer.set(m, { name: m, inner: new Map(), values: [], budget: 0 });
+      }
+      if (secondary === "metier_sub_service") {
+        for (const m of seeds) {
+          const o = outer.get(m)!;
+          for (const s of allSubsForMain(m, projects)) {
+            o.inner.set(s, { name: s, values: [], budget: 0 });
+          }
+        }
+      }
+    }
+
     for (const p of filtered) {
-      const k1 = getValue(p, primary);
-      const k2 = secondary === "NONE" ? "(รวม)" : getValue(p, secondary);
+      const k1 = getValue(p, primary, overrides);
+      const k2 = secondary === "NONE" ? "(รวม)" : getValue(p, secondary, overrides);
       const b = Number(p.total_budget) || 0;
       const out = outer.get(k1) ?? { name: k1, inner: new Map<string, Inner>(), values: [], budget: 0 };
       out.values.push(b);
@@ -120,26 +162,34 @@ export function GroupsExplorer({ projects }: { projects: ProjectRecord[] }) {
       out.inner.set(k2, inn);
       outer.set(k1, out);
     }
-    return Array.from(outer.values())
-      .map((o) => {
-        const innerArr = Array.from(o.inner.values())
-          .map((inn) => ({
-            name: inn.name,
-            count: inn.values.length,
-            metric: computeMetric(inn.values, metric),
-            budget: inn.budget,
-          }))
-          .sort((a, b) => b.metric - a.metric);
-        return {
-          name: o.name,
-          count: o.values.length,
-          metric: computeMetric(o.values, metric),
-          budget: o.budget,
-          children: innerArr,
-        };
-      })
-      .sort((a, b) => b.metric - a.metric);
-  }, [filtered, primary, secondary, metric]);
+
+    // Preserve the canonical Metier ordering; otherwise sort by metric desc.
+    const arr = Array.from(outer.values()).map((o) => {
+      const innerArr = Array.from(o.inner.values())
+        .map((inn) => ({
+          name: inn.name,
+          count: inn.values.length,
+          metric: computeMetric(inn.values, metric),
+          budget: inn.budget,
+        }))
+        .sort((a, b) => b.metric - a.metric);
+      return {
+        name: o.name,
+        count: o.values.length,
+        metric: computeMetric(o.values, metric),
+        budget: o.budget,
+        children: innerArr,
+      };
+    });
+
+    if (primary === "metier_main_group") {
+      const order = ALL_MAIN_GROUPS as readonly string[];
+      arr.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+    } else {
+      arr.sort((a, b) => b.metric - a.metric);
+    }
+    return arr;
+  }, [filtered, primary, secondary, metric, metierOnly, overrides, projects]);
 
   const grandTotal = useMemo(
     () => buckets.reduce((s, b) => s + b.metric, 0),
@@ -150,33 +200,44 @@ export function GroupsExplorer({ projects }: { projects: ProjectRecord[] }) {
     if (activePrimary) {
       const node = buckets.find((b) => b.name === activePrimary);
       if (!node) return [];
-      return node.children.map((c) => ({
-        name: c.name,
-        size: c.metric > 0 ? c.metric : 0.0001,
-        count: c.count,
-        budget: c.budget,
-      }));
+      return node.children
+        .filter((c) => c.metric > 0)
+        .map((c) => ({
+          name: c.name,
+          size: c.metric,
+          count: c.count,
+          budget: c.budget,
+        }));
     }
-    return buckets.map((b, i) => ({
-      name: b.name,
-      size: b.metric > 0 ? b.metric : 0.0001,
-      count: b.count,
-      budget: b.budget,
-      color: PALETTE[i % PALETTE.length],
-    }));
+    return buckets
+      .filter((b) => b.metric > 0)
+      .map((b, i) => ({
+        name: b.name,
+        size: b.metric,
+        count: b.count,
+        budget: b.budget,
+        color: PALETTE[i % PALETTE.length],
+      }));
   }, [buckets, activePrimary]);
 
   const reset = () => {
     setQ("");
     setMetierOnly(false);
-    setPrimary("work_category_layer1");
-    setSecondary("work_category_layer2");
-    setMetric("budget");
+    setPrimary("metier_main_group");
+    setSecondary("metier_sub_service");
+    setMetric("count");
     setActivePrimary(null);
   };
 
   return (
     <div className="space-y-6">
+      {/* Manual tagger — pick a Main Group + Sub-service per project */}
+      <GroupTagger
+        projects={projects}
+        overrides={overrides}
+        setOverrides={setOverrides}
+      />
+
       {/* Builder */}
       <Card>
         <CardContent className="pt-5">
@@ -231,7 +292,7 @@ export function GroupsExplorer({ projects }: { projects: ProjectRecord[] }) {
                   : "border-[color:var(--color-border)] text-[color:var(--color-muted-fg)] hover:text-fg",
               )}
             >
-              เฉพาะ Metier-relevant
+              เฉพาะ 4 กลุ่ม Metier
             </button>
             <div className="ml-auto w-[260px]">
               <Input
@@ -340,9 +401,8 @@ export function GroupsExplorer({ projects }: { projects: ProjectRecord[] }) {
                   const pct = grandTotal ? (b.metric / grandTotal) * 100 : 0;
                   const active = activePrimary === b.name;
                   return (
-                    <>
+                    <Fragment key={b.name}>
                       <tr
-                        key={b.name}
                         className={cn(
                           "border-t border-[color:var(--color-border)] cursor-pointer transition-colors hover:bg-[color:var(--color-subtle)]/60",
                           active && "bg-[color:var(--color-metier-orange)]/[0.06]",
@@ -378,7 +438,7 @@ export function GroupsExplorer({ projects }: { projects: ProjectRecord[] }) {
                         </td>
                       </tr>
                       {active && secondary !== "NONE" && (
-                        <tr>
+                        <tr key={`${b.name}-children`}>
                           <td colSpan={6} className="bg-[color:var(--color-subtle)]/40 px-3 py-3">
                             <div className="space-y-1">
                               {b.children.map((c) => (
@@ -402,7 +462,7 @@ export function GroupsExplorer({ projects }: { projects: ProjectRecord[] }) {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
                 {buckets.length === 0 && (

@@ -1,5 +1,6 @@
 import projectsJson from "@/data/projects.json";
 import type { ProjectRecord } from "@/types/db";
+import { getMainGroup, isMetierGroup } from "@/lib/data/metier-taxonomy";
 
 const projects = projectsJson as unknown as ProjectRecord[];
 
@@ -12,9 +13,7 @@ export function getProjectById(id: string): ProjectRecord | undefined {
 }
 
 export function getMetierProjects(): ProjectRecord[] {
-  return projects.filter(
-    (p) => p.metier_service_area_layer1 && p.metier_service_area_layer1 !== "NOT_APPLICABLE",
-  );
+  return projects.filter((p) => isMetierGroup(getMainGroup(p)));
 }
 
 // -------- pre-computed lookups (cheap because we run on the server) --------

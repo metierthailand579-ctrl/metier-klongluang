@@ -1,7 +1,6 @@
 import {
   getAllProjects,
   uniqueDepartments,
-  uniqueMetierAreas,
   uniqueStrategies,
 } from "@/lib/data/projects";
 import { ProjectsExplorer } from "@/components/projects/projects-explorer";
@@ -12,7 +11,6 @@ export default function ProjectsPage() {
   const projects = getAllProjects();
   const strategies = uniqueStrategies();
   const departments = uniqueDepartments();
-  const metierAreas = uniqueMetierAreas();
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-10">
@@ -23,8 +21,8 @@ export default function ProjectsPage() {
         <div>
           <h1 className="text-[32px] font-bold leading-tight">โครงการทั้งหมดในแผน</h1>
           <p className="mt-2 max-w-3xl font-light text-[color:var(--color-muted-fg)]">
-            1,333 โครงการในแผนพัฒนาท้องถิ่นเทศบาลเมืองคลองหลวง พ.ศ. 2566–2570
-            — แสดงเฉพาะ field สำคัญ พร้อมค้นหา กรอง เรียง
+            1,333 โครงการในแผนพัฒนาท้องถิ่นเทศบาลเมืองคลองหลวง พ.ศ. 2568–2570
+            — ทุกโครงการอ้างกลับไปยัง PDF ต้นฉบับ + เลขหน้า · งบประมาณแบ่งตามหน่วยงาน × ปี
           </p>
         </div>
       </header>
@@ -33,7 +31,6 @@ export default function ProjectsPage() {
         initialProjects={projects}
         strategies={strategies}
         departments={departments}
-        metierAreas={metierAreas}
       />
     </div>
   );

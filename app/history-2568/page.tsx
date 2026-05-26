@@ -1,15 +1,10 @@
-import {
-  getAllHistory,
-  uniqueHistoryCategories,
-  uniqueHistoryYears,
-} from "@/lib/data/history";
+import { getAllHistory, uniqueHistoryYears } from "@/lib/data/history";
 import { HistoryExplorer } from "@/components/history/history-explorer";
 
 export const metadata = { title: "ย้อนหลังปี 2568 · คลองหลวง 2026" };
 
 export default function HistoryPage() {
   const records = getAllHistory();
-  const categories = uniqueHistoryCategories();
   const years = uniqueHistoryYears();
 
   return (
@@ -21,13 +16,13 @@ export default function HistoryPage() {
         <div>
           <h1 className="text-[32px] font-bold leading-tight">โครงการจัดซื้อจัดจ้างปี 2568</h1>
           <p className="mt-2 max-w-3xl font-light text-[color:var(--color-muted-fg)]">
-            1,449 รายการที่เทศบาลจัดซื้อจัดจ้างจริง (ปี 2567–2569 ตามข้อมูล XLSX-04)
-            — ใช้เป็น reference เพื่อดูว่าโครงการคล้ายกัน เทศบาลเคยจัดซื้อในรูปแบบไหน
+            1,449 รายการที่เทศบาลจัดซื้อจัดจ้างจริง — สรุปเป็น 3 มุม:
+            ประเภทงาน · หน่วยงาน · ประเภทการจัดจ้าง คลิกแต่ละบรรทัดเพื่อ filter ทั้งตาราง
           </p>
         </div>
       </header>
 
-      <HistoryExplorer records={records} categories={categories} years={years} />
+      <HistoryExplorer records={records} years={years} />
     </div>
   );
 }

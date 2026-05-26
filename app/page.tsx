@@ -20,31 +20,37 @@ const SECTIONS = [
     n: "3",
     href: "/groups",
     title: "จัดกลุ่ม",
-    desc: "แบ่งกลุ่ม / สับกลุ่ม ตามยุทธศาสตร์ + Metier Service Area",
+    desc: "11 Main Groups (4 Metier + 7 Municipal) — ติ๊กเปลี่ยนกลุ่มแต่ละโครงการเองได้",
   },
   {
     n: "4",
     href: "/history-2568",
-    title: "โครงการปี 2568",
-    desc: "1,449 รายการจัดซื้อจัดจ้างจริงปี 2568 (ใช้เป็น reference)",
+    title: "ย้อนหลังปี 2568",
+    desc: "1,449 รายการจัดซื้อจัดจ้างจริง — สรุป 3 มุม: ประเภทงาน / หน่วยงาน / วิธีจัดจ้าง",
   },
   {
     n: "5",
     href: "/filter",
     title: "คัดเลือก",
-    desc: "Filter + ติ๊กโครงการที่ Metier ทำได้ — สรุปสด ๆ ทุกครั้งที่เลือก",
+    desc: "Filter หลายมิติ + ติ๊กโครงการที่ Metier ทำได้ + ปุ่ม 'ทีมแนะนำ'",
   },
   {
     n: "6",
     href: "/selected",
     title: "TOR + SOW",
-    desc: "โครงการที่เลือก เทียบกับ TOR เก่า + ร่าง SOW + ปุ่ม Confirm",
+    desc: "ใส่ Priority + ไตรมาส + แนบไฟล์ TOR + ร่าง SOW + Confirm",
+  },
+  {
+    n: "T",
+    href: "/timeline",
+    title: "Timeline",
+    desc: "ภาพรวมโหลดต่อไตรมาส 2569 / 2570 — Kanban ตามวันเริ่ม",
   },
   {
     n: "7",
     href: "/status",
     title: "สถานะ",
-    desc: "Kanban: ร่าง TOR → เปิดโครงการ → ยื่น → ดำเนินงาน → เสร็จ",
+    desc: "Kanban + auto-detect 'ล่าช้า/ตามแผน' จาก start date · Comments per card",
   },
 ];
 
@@ -86,7 +92,7 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto max-w-[1440px] px-6 py-14">
-        <h2 className="mb-6 text-[24px] font-bold">7 หน้าหลัก</h2>
+        <h2 className="mb-6 text-[24px] font-bold">8 หน้าหลัก</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {SECTIONS.map((s) => (
             <Link key={s.href} href={s.href} className="group">

@@ -2,22 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  Search,
-  X,
-} from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Cell,
-  Tooltip,
-} from "recharts";
+import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -27,45 +12,76 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KpiCard } from "@/components/kpi-card";
+import { SummaryList, type SummaryRow } from "./summary-list";
 import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
 import type { ProcurementRecord } from "@/types/db";
+import {
+  METHOD_COLORS,
+  getCleanName,
+  getDepartment,
+  getProcurementMainGroup,
+  getProcurementMethod,
+  type ProcurementMethod,
+} from "@/lib/data/history-derived";
+import { GROUP_COLOR } from "@/lib/data/metier-taxonomy";
 
 type SortKey = "name" | "agency" | "price" | "year";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 50;
 const ALL = "__all__";
 
+type Enriched = ProcurementRecord & {
+  _dept: string;
+  _method: ProcurementMethod;
+  _mainGroup: string;
+  _cleanName: string;
+};
+
 export function HistoryExplorer({
   records,
-  categories,
   years,
 }: {
   records: ProcurementRecord[];
-  categories: string[];
   years: number[];
 }) {
+  // Enrich every record once with the derived fields.
+  const enriched = useMemo<Enriched[]>(
+    () =>
+      records.map((r) => ({
+        ...r,
+        _dept: getDepartment(r),
+        _method: getProcurementMethod(r),
+        _mainGroup: getProcurementMainGroup(r),
+        _cleanName: getCleanName(r),
+      })),
+    [records],
+  );
+
   const [q, setQ] = useState("");
   const [year, setYear] = useState<string>(ALL);
-  const [category, setCategory] = useState<string>(ALL);
+  const [workType, setWorkType] = useState<string | null>(null);
+  const [dept, setDept] = useState<string | null>(null);
+  const [method, setMethod] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return records.filter((r) => {
+    return enriched.filter((r) => {
       if (year !== ALL && String(r.year ?? "") !== year) return false;
-      if (category !== ALL && r.category !== category) return false;
+      if (workType && r._mainGroup !== workType) return false;
+      if (dept && r._dept !== dept) return false;
+      if (method && r._method !== method) return false;
       if (needle) {
-        const hay = `${r.project_name ?? ""} ${r.agency ?? ""} ${r.project_code ?? ""}`.toLowerCase();
+        const hay = `${r.project_name ?? ""} ${r._dept} ${r.project_code ?? ""}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-  }, [records, q, year, category]);
+  }, [enriched, q, year, workType, dept, method]);
 
   const sorted = useMemo(() => {
     const arr = filtered.slice();
@@ -73,9 +89,9 @@ export function HistoryExplorer({
       const dir = sortDir === "asc" ? 1 : -1;
       switch (sortKey) {
         case "name":
-          return dir * (a.project_name || "").localeCompare(b.project_name || "", "th");
+          return dir * (a._cleanName || "").localeCompare(b._cleanName || "", "th");
         case "agency":
-          return dir * (a.agency || "").localeCompare(b.agency || "", "th");
+          return dir * a._dept.localeCompare(b._dept, "th");
         case "year":
           return dir * ((a.year || 0) - (b.year || 0));
         case "price":
@@ -88,28 +104,41 @@ export function HistoryExplorer({
 
   const stats = useMemo(() => {
     let total = 0;
-    const byCat = new Map<string, { count: number; value: number }>();
+    const byMain = new Map<string, { count: number; value: number }>();
+    const byDept = new Map<string, { count: number; value: number }>();
+    const byMethod = new Map<string, { count: number; value: number }>();
     const byYear = new Map<number, { count: number; value: number }>();
     for (const r of filtered) {
       const v = Number(r.price) || 0;
       total += v;
-      const cat = r.category || "(ไม่ระบุประเภท)";
-      const slotC = byCat.get(cat) ?? { count: 0, value: 0 };
-      slotC.count += 1;
-      slotC.value += v;
-      byCat.set(cat, slotC);
-      if (r.year != null) {
-        const slotY = byYear.get(r.year) ?? { count: 0, value: 0 };
-        slotY.count += 1;
-        slotY.value += v;
-        byYear.set(r.year, slotY);
-      }
+      bump(byMain, r._mainGroup, v);
+      // Skip the "(ไม่ระบุหน่วยงาน)" bucket per spec — it overwhelms the chart
+      // and isn't useful for decision-making.
+      if (r._dept !== "(ไม่ระบุหน่วยงาน)") bump(byDept, r._dept, v);
+      bump(byMethod, r._method, v);
+      if (r.year != null) bump(byYear, r.year, v);
     }
-    const catData = Array.from(byCat.entries())
-      .map(([name, s]) => ({ name, count: s.count, value: s.value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
-    return { total, count: filtered.length, catData, byYear };
+    const toRows = <K extends string | number>(
+      m: Map<K, { count: number; value: number }>,
+      color?: (k: K) => string | undefined,
+    ): SummaryRow[] =>
+      Array.from(m.entries())
+        .map(([k, s]) => ({
+          key: String(k),
+          label: String(k),
+          count: s.count,
+          value: s.value,
+          color: color?.(k),
+        }))
+        .sort((a, b) => b.value - a.value);
+    return {
+      total,
+      count: filtered.length,
+      workTypeRows: toRows(byMain, (k) => GROUP_COLOR[k as string]),
+      deptRows: toRows(byDept),
+      methodRows: toRows(byMethod, (k) => METHOD_COLORS[k as ProcurementMethod]),
+      byYear,
+    };
   }, [filtered]);
 
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
@@ -128,11 +157,14 @@ export function HistoryExplorer({
   const reset = () => {
     setQ("");
     setYear(ALL);
-    setCategory(ALL);
+    setWorkType(null);
+    setDept(null);
+    setMethod(null);
     setPage(0);
   };
 
-  const filtersActive = q !== "" || year !== ALL || category !== ALL;
+  const filtersActive =
+    q !== "" || year !== ALL || workType !== null || dept !== null || method !== null;
 
   return (
     <div className="space-y-6">
@@ -155,9 +187,9 @@ export function HistoryExplorer({
           hint={formatBaht(stats.total) + " บาท"}
         />
         <KpiCard
-          label="ประเภทที่พบ"
-          value={stats.catData.length.toLocaleString("th-TH")}
-          unit="ประเภท"
+          label="หน่วยงานที่พบ"
+          value={stats.deptRows.length.toLocaleString("th-TH")}
+          unit="หน่วย"
         />
         <KpiCard
           label="ปี"
@@ -171,62 +203,42 @@ export function HistoryExplorer({
         />
       </motion.div>
 
-      {/* Chart per category */}
-      <Card>
-        <CardContent className="pt-5">
-          <div className="mb-2 flex items-baseline justify-between">
-            <CardTitle>Top 10 ประเภท · ตามยอดเงิน</CardTitle>
-            <CardDescription>(อัปเดตตามฟิลเตอร์)</CardDescription>
-          </div>
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer>
-              <BarChart
-                data={stats.catData}
-                layout="vertical"
-                margin={{ top: 4, right: 12, bottom: 4, left: 4 }}
-              >
-                <XAxis
-                  type="number"
-                  tickFormatter={(v) => formatBahtCompact(v as number)}
-                  tick={{ fill: "#6b7280", fontSize: 12 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={170}
-                  tick={{ fill: "#0a0a0a", fontSize: 12 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  cursor={{ fill: "rgba(0,0,0,0.04)" }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const p = payload[0]?.payload as { name: string; value: number; count: number };
-                    return (
-                      <div className="rounded-md border border-[color:var(--color-border)] bg-white p-3 text-[13px] shadow-md">
-                        <div className="font-medium">{p.name}</div>
-                        <div className="mt-1 text-[color:var(--color-muted-fg)]">
-                          {formatBaht(p.value)} บาท · {p.count.toLocaleString("th-TH")} รายการ
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                  {stats.catData.map((_, i) => (
-                    <Cell key={i} fill={i === 0 ? "#ff5008" : "#1f2937"} fillOpacity={i === 0 ? 1 : 0.85 - i * 0.04} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Three-up summary — work type / department / procurement method */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <SummaryList
+          title="ตามประเภทงาน"
+          description="คลิกเพื่อ filter — derived จากชื่อโครงการ (ซื้อ / จ้าง / เช่า)"
+          rows={stats.workTypeRows}
+          active={workType}
+          onPick={(k) => {
+            setWorkType(k);
+            setPage(0);
+          }}
+        />
+        <SummaryList
+          title="ตามหน่วยงาน"
+          description="คลิกเพื่อ filter — derived จากวงเล็บในชื่อโครงการ"
+          rows={stats.deptRows}
+          active={dept}
+          onPick={(k) => {
+            setDept(k);
+            setPage(0);
+          }}
+          maxRows={10}
+        />
+        <SummaryList
+          title="ตามประเภทการจัดจ้าง"
+          description="คลิกเพื่อ filter — เฉพาะเจาะจง / e-bidding / คัดเลือก"
+          rows={stats.methodRows}
+          active={method}
+          onPick={(k) => {
+            setMethod(k);
+            setPage(0);
+          }}
+        />
+      </div>
 
-      {/* Toolbar */}
+      {/* Toolbar — quick search + year + reset (the three breakdowns above act as filters) */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--color-border)] bg-white p-4">
         <div className="relative min-w-[260px] flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted)]" />
@@ -253,19 +265,13 @@ export function HistoryExplorer({
             </SelectContent>
           </Select>
         </div>
-        <div className="w-[260px]">
-          <Select value={category} onValueChange={(v) => { setCategory(v); setPage(0); }}>
-            <SelectTrigger>
-              <SelectValue placeholder="ประเภท" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>ทุกประเภท</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {(workType || dept || method) && (
+          <div className="flex flex-wrap items-center gap-1 text-[12px]">
+            {workType && <ActiveFilterChip label="งาน" value={workType} onClear={() => setWorkType(null)} />}
+            {dept && <ActiveFilterChip label="หน่วย" value={dept} onClear={() => setDept(null)} />}
+            {method && <ActiveFilterChip label="วิธี" value={method} onClear={() => setMethod(null)} />}
+          </div>
+        )}
         {filtersActive && (
           <Button size="sm" variant="ghost" onClick={reset}>
             <X className="h-3.5 w-3.5" /> ล้างฟิลเตอร์
@@ -283,8 +289,9 @@ export function HistoryExplorer({
                   เลขโครงการ
                 </th>
                 <SortableTh label="ชื่อโครงการ" k="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                <SortableTh label="หน่วยงาน" k="agency" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-[160px]" />
-                <th className="w-[140px] px-3 py-2 font-medium text-[color:var(--color-muted-fg)]">ประเภท</th>
+                <SortableTh label="หน่วยงาน" k="agency" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-[170px]" />
+                <th className="w-[120px] px-3 py-2 font-medium text-[color:var(--color-muted-fg)]">ประเภทงาน</th>
+                <th className="w-[110px] px-3 py-2 font-medium text-[color:var(--color-muted-fg)]">วิธี</th>
                 <SortableTh label="ปี" k="year" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-[70px] text-right" align="right" />
                 <SortableTh label="ราคา (บาท)" k="price" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="w-[140px] text-right" align="right" />
               </tr>
@@ -302,17 +309,34 @@ export function HistoryExplorer({
                     {r.project_code}
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <div className="leading-snug">{r.project_name}</div>
+                    <div className="leading-snug">{r._cleanName}</div>
                   </td>
-                  <td className="px-3 py-2 align-top text-[13px]">{r.agency || "—"}</td>
+                  <td className="px-3 py-2 align-top text-[13px]">{r._dept}</td>
                   <td className="px-3 py-2 align-top">
-                    <Badge variant="muted" className="whitespace-normal">
-                      {r.category || "—"}
+                    <Badge
+                      variant="outline"
+                      className="whitespace-normal"
+                      style={{
+                        borderColor: GROUP_COLOR[r._mainGroup] ?? "#94a3b8",
+                        color: GROUP_COLOR[r._mainGroup] ?? "#94a3b8",
+                      }}
+                    >
+                      {r._mainGroup}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2 align-top text-right tabular-nums">
-                    {r.year || "—"}
+                  <td className="px-3 py-2 align-top">
+                    <Badge
+                      variant="outline"
+                      className="whitespace-normal"
+                      style={{
+                        borderColor: METHOD_COLORS[r._method],
+                        color: METHOD_COLORS[r._method],
+                      }}
+                    >
+                      {r._method}
+                    </Badge>
                   </td>
+                  <td className="px-3 py-2 align-top text-right tabular-nums">{r.year || "—"}</td>
                   <td className="px-3 py-2 align-top text-right tabular-nums font-medium">
                     {formatBaht(r.price)}
                   </td>
@@ -320,7 +344,7 @@ export function HistoryExplorer({
               ))}
               {pageData.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-12 text-center text-[color:var(--color-muted)]">
+                  <td colSpan={7} className="px-3 py-12 text-center text-[color:var(--color-muted)]">
                     ไม่พบรายการตามเงื่อนไข
                   </td>
                 </tr>
@@ -350,6 +374,37 @@ export function HistoryExplorer({
         )}
       </div>
     </div>
+  );
+}
+
+function bump<K>(m: Map<K, { count: number; value: number }>, k: K, v: number) {
+  const s = m.get(k) ?? { count: 0, value: 0 };
+  s.count += 1;
+  s.value += v;
+  m.set(k, s);
+}
+
+function ActiveFilterChip({
+  label,
+  value,
+  onClear,
+}: {
+  label: string;
+  value: string;
+  onClear: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-metier-orange/40 bg-[color:var(--color-metier-orange)]/[0.08] px-2 py-0.5 text-metier-orange">
+      <span className="font-semibold">{label}:</span>
+      <span>{value}</span>
+      <button
+        onClick={onClear}
+        className="ml-0.5 rounded-full p-0.5 hover:bg-metier-orange/20"
+        aria-label="clear"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
   );
 }
 

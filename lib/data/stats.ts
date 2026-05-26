@@ -1,4 +1,5 @@
 import type { ProjectRecord } from "@/types/db";
+import { getMainGroup, isMetierGroup } from "@/lib/data/metier-taxonomy";
 
 export type Bucket = { key: string; count: number; budget: number };
 
@@ -7,14 +8,14 @@ export function summarize(projects: ProjectRecord[]) {
     (s, p) => s + (Number(p.total_budget) || 0),
     0,
   );
-  const metierCount = projects.filter(
-    (p) => p.metier_service_area_layer1 && p.metier_service_area_layer1 !== "NOT_APPLICABLE",
-  ).length;
-  const metierBudget = projects
-    .filter(
-      (p) => p.metier_service_area_layer1 && p.metier_service_area_layer1 !== "NOT_APPLICABLE",
-    )
-    .reduce((s, p) => s + (Number(p.total_budget) || 0), 0);
+  // Use the canonical 11-group taxonomy + Marketing/event promotions, not the
+  // raw seed field. This matches the counts on the /groups page.
+  const metier = projects.filter((p) => isMetierGroup(getMainGroup(p)));
+  const metierCount = metier.length;
+  const metierBudget = metier.reduce(
+    (s, p) => s + (Number(p.total_budget) || 0),
+    0,
+  );
 
   return {
     count: projects.length,

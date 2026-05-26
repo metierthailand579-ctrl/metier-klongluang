@@ -13,12 +13,12 @@ export default function GroupsPage() {
           3
         </span>
         <div>
-          <h1 className="text-[32px] font-bold leading-tight">ตั้งค่าจัดกลุ่มเอง</h1>
+          <h1 className="text-[32px] font-bold leading-tight">จัดกลุ่ม 1,333 โครงการ</h1>
           <p className="mt-2 max-w-3xl font-light text-[color:var(--color-muted-fg)]">
-            เลือก <strong>มิติหลัก</strong> + <strong>มิติย่อย</strong> +{" "}
-            <strong>หน่วยวัด</strong> ได้เอง — เช่น "หน่วยงาน × ยุทธศาสตร์ ด้วยงบรวม"
-            หรือ "Metier area × ปีเริ่ม ด้วยจำนวน".
-            Treemap + ตารางกลุ่มจะ render ตามที่เลือกทันที
+            แบ่งเป็น <strong>11 Main Groups</strong> — <strong>4 กลุ่ม Metier</strong>{" "}
+            (MARKETING / MEDIA / CREATIVE / SOFTWARE) + <strong>7 กลุ่ม Municipal</strong>{" "}
+            (โครงสร้างพื้นฐาน · ครุภัณฑ์ · บริหารจัดการ · คุณภาพชีวิต · การศึกษาฯ · ความสะอาดฯ · ชุมชนเข้มแข็ง).
+            กดเปลี่ยนกลุ่มของแต่ละโครงการได้เองในตารางด้านล่าง — บันทึกอัตโนมัติ
           </p>
         </div>
       </header>
