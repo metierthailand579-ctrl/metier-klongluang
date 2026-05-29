@@ -52,6 +52,12 @@ const SECTIONS = [
     title: "สถานะ",
     desc: "Kanban + auto-detect 'ล่าช้า/ตามแผน' จาก start date · Comments per card",
   },
+  {
+    n: "!",
+    href: "/issues",
+    title: "ปัญหา & Bug",
+    desc: "บันทึกปัญหา · วิธีแก้ · แจ้ง bug — ทีมเห็นและอัปเดตร่วมกัน realtime",
+  },
 ];
 
 export default function HomePage() {
@@ -92,7 +98,7 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto max-w-[1440px] px-6 py-14">
-        <h2 className="mb-6 text-[24px] font-bold">8 หน้าหลัก</h2>
+        <h2 className="mb-6 text-[24px] font-bold">9 หน้าหลัก</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {SECTIONS.map((s) => (
             <Link key={s.href} href={s.href} className="group">

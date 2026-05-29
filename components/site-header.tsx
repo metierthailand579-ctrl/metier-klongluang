@@ -19,6 +19,7 @@ const NAV = [
   { href: "/selected", label: "6 · TOR + SOW", countKey: "selected" as const },
   { href: "/timeline", label: "Timeline", countKey: "selected" as const },
   { href: "/status", label: "7 · สถานะ", countKey: "confirmed" as const },
+  { href: "/issues", label: "ปัญหา & Bug" },
 ];
 
 type ConfirmRecord = { confirmed: boolean };
