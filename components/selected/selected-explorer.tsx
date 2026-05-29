@@ -13,9 +13,11 @@ import {
   Download,
   FileText,
   Flag,
+  MessageSquare,
   Paperclip,
   Plus,
   Search,
+  Send,
   Trash2,
   X,
 } from "lucide-react";
@@ -93,10 +95,18 @@ export type ConfirmRecord = {
 
 export type TorUsability = "pending" | "usable" | "not_usable";
 
+export type TorComment = {
+  id: string;
+  author: string;
+  body: string;
+  created_at: string;
+};
+
 export type TorRef = {
   code: string;
   note: string;
   usable?: TorUsability; // undefined === "pending" (back-compat for existing rows)
+  comments?: TorComment[];
 };
 
 export type Priority = "urgent" | "high" | "medium" | "low" | "";
@@ -749,6 +759,36 @@ function TorRefList({
         return { ...t, usable: next };
       }),
     );
+  const addComment = (i: number, body: string, author: string) => {
+    const b = body.trim();
+    if (!b) return;
+    onUpdate((prev) =>
+      prev.map((t, idx) =>
+        idx === i
+          ? {
+              ...t,
+              comments: [
+                ...(t.comments ?? []),
+                {
+                  id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                  author: author.trim() || "ไม่ระบุชื่อ",
+                  body: b,
+                  created_at: new Date().toISOString(),
+                },
+              ],
+            }
+          : t,
+      ),
+    );
+  };
+  const removeComment = (i: number, cid: string) =>
+    onUpdate((prev) =>
+      prev.map((t, idx) =>
+        idx === i
+          ? { ...t, comments: (t.comments ?? []).filter((c) => c.id !== cid) }
+          : t,
+      ),
+    );
 
   // Tally usability for the header badge
   const usableCount = items.filter((t) => t.usable === "usable").length;
@@ -817,50 +857,16 @@ function TorRefList({
         </div>
       ) : (
         <ul className="space-y-2">
-          {items.map((t, i) => {
-            const u = t.usable ?? "pending";
-            const usableStyles =
-              u === "usable"
-                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                : u === "not_usable"
-                  ? "border-red-500 bg-red-50 text-red-700 line-through opacity-60"
-                  : "border-amber-500/50 bg-amber-50/50 text-amber-700";
-            const usableLabel =
-              u === "usable" ? "✓ ใช้ได้" : u === "not_usable" ? "✗ ใช้ไม่ได้" : "⏳ รอตรวจ";
-            return (
-              <li
-                key={i}
-                className={cn(
-                  "group flex items-start gap-2 rounded-md border bg-white p-2.5 text-[13px]",
-                  u === "not_usable" ? "border-red-200" : "border-[color:var(--color-border)]",
-                )}
-              >
-                <div className={cn("min-w-0 flex-1", u === "not_usable" && "opacity-60")}>
-                  {t.code && (
-                    <div className="font-mono text-[11px] text-metier-orange">{t.code}</div>
-                  )}
-                  {t.note && <div className="mt-0.5 leading-snug">{t.note}</div>}
-                </div>
-                <button
-                  onClick={() => cycleUsable(i)}
-                  className={cn(
-                    "shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors",
-                    usableStyles,
-                  )}
-                  title="คลิกเพื่อเปลี่ยน: รอตรวจ → ใช้ได้ → ใช้ไม่ได้"
-                >
-                  {usableLabel}
-                </button>
-                <button
-                  onClick={() => remove(i)}
-                  className="invisible shrink-0 rounded p-0.5 text-[color:var(--color-muted)] hover:bg-[color:var(--color-subtle)] hover:text-fg group-hover:visible"
-                  title="ลบ"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            );
-          })}
+          {items.map((t, i) => (
+            <TorRefItem
+              key={i}
+              tor={t}
+              onCycleUsable={() => cycleUsable(i)}
+              onRemove={() => remove(i)}
+              onAddComment={(body, author) => addComment(i, body, author)}
+              onRemoveComment={(cid) => removeComment(i, cid)}
+            />
+          ))}
         </ul>
       )}
 
@@ -950,6 +956,153 @@ function TorRefList({
         </div>
       </div>
     </div>
+  );
+}
+
+function TorRefItem({
+  tor,
+  onCycleUsable,
+  onRemove,
+  onAddComment,
+  onRemoveComment,
+}: {
+  tor: TorRef;
+  onCycleUsable: () => void;
+  onRemove: () => void;
+  onAddComment: (body: string, author: string) => void;
+  onRemoveComment: (cid: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [body, setBody] = useState("");
+  const [authorName, setAuthorName] = useLocalStorage<string>(
+    "khlongluang.commentAuthor.v1",
+    "",
+  );
+
+  const u = tor.usable ?? "pending";
+  const comments = tor.comments ?? [];
+  const usableStyles =
+    u === "usable"
+      ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+      : u === "not_usable"
+        ? "border-red-500 bg-red-50 text-red-700"
+        : "border-amber-500/50 bg-amber-50/50 text-amber-700";
+  const usableLabel =
+    u === "usable" ? "✓ ใช้ได้" : u === "not_usable" ? "✗ ใช้ไม่ได้" : "⏳ รอตรวจ";
+
+  const submit = () => {
+    if (!body.trim()) return;
+    onAddComment(body, authorName);
+    setBody("");
+  };
+
+  return (
+    <li
+      className={cn(
+        "rounded-md border bg-white text-[13px]",
+        u === "not_usable" ? "border-red-200" : "border-[color:var(--color-border)]",
+      )}
+    >
+      <div className="group flex items-start gap-2 p-2.5">
+        <div className={cn("min-w-0 flex-1", u === "not_usable" && "opacity-60")}>
+          {tor.code && (
+            <div className="font-mono text-[11px] text-metier-orange">{tor.code}</div>
+          )}
+          {tor.note && (
+            <div className={cn("mt-0.5 leading-snug", u === "not_usable" && "line-through")}>
+              {tor.note}
+            </div>
+          )}
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-[color:var(--color-muted)] hover:text-fg"
+          >
+            <MessageSquare className="h-3 w-3" />
+            {comments.length > 0 ? `${comments.length} comment` : "เพิ่ม comment"}
+            {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+        </div>
+        <button
+          onClick={onCycleUsable}
+          className={cn(
+            "shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors",
+            usableStyles,
+          )}
+          title="คลิกเพื่อเปลี่ยน: รอตรวจ → ใช้ได้ → ใช้ไม่ได้"
+        >
+          {usableLabel}
+        </button>
+        <button
+          onClick={onRemove}
+          className="invisible shrink-0 rounded p-0.5 text-[color:var(--color-muted)] hover:bg-[color:var(--color-subtle)] hover:text-fg group-hover:visible"
+          title="ลบ"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2 border-t border-[color:var(--color-border)] bg-[color:var(--color-subtle)]/30 p-2.5">
+              {comments.length > 0 && (
+                <ul className="space-y-1.5">
+                  {comments
+                    .slice()
+                    .reverse()
+                    .map((c) => (
+                      <li
+                        key={c.id}
+                        className="group/c rounded-md border border-[color:var(--color-border)] bg-white p-2 text-[12px]"
+                      >
+                        <div className="flex items-baseline justify-between gap-2 text-[10.5px] text-[color:var(--color-muted-fg)]">
+                          <span className="font-bold text-fg">{c.author}</span>
+                          <span className="tabular-nums">
+                            {c.created_at.slice(0, 10)} {c.created_at.slice(11, 16)}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 whitespace-pre-wrap leading-snug">{c.body}</div>
+                        <button
+                          onClick={() => onRemoveComment(c.id)}
+                          className="invisible mt-0.5 inline-flex items-center gap-1 text-[10px] text-[color:var(--color-muted)] hover:text-red-600 group-hover/c:visible"
+                        >
+                          <Trash2 className="h-2.5 w-2.5" /> ลบ
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              )}
+              <Input
+                value={authorName}
+                onChange={(e) => setAuthorName(e.target.value)}
+                placeholder="ชื่อผู้คอมเมนต์"
+                className="h-7 text-[11px]"
+              />
+              <div className="flex items-start gap-1.5">
+                <Textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+                  }}
+                  placeholder="comment เกี่ยวกับ TOR นี้ (⌘/Ctrl+Enter ส่ง)"
+                  className="min-h-[40px] flex-1 text-[12px]"
+                />
+                <Button size="sm" onClick={submit} disabled={!body.trim()}>
+                  <Send className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </li>
   );
 }
 
