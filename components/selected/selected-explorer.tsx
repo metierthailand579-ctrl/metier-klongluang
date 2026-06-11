@@ -11,6 +11,7 @@ import {
   ChevronUp,
   ClipboardEdit,
   Download,
+  ExternalLink,
   FileText,
   Flag,
   MessageSquare,
@@ -83,6 +84,7 @@ const SOW_KEY = "khlongluang.sowItems.v1";
 const CONFIRM_KEY = "khlongluang.confirmations.v1";
 const META_KEY = "khlongluang.projectMeta.v1";
 const ATTACH_KEY = "khlongluang.torAttachments.v1";
+const TOR_DRAFT_KEY = "khlongluang.torDrafts.v1";
 
 // 2 MB / file — keeps localStorage manageable until Supabase Storage is wired up.
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -135,6 +137,25 @@ export type TorAttachment = {
   uploaded_at: string;
 };
 
+// The actual TOR the team drafts themselves (work product), stored inline as
+// text and synced so everyone sees the same draft. Distinct from TorRef, which
+// only points at existing/historical TOR documents.
+export type TorDraftStatus = "drafting" | "done" | "submitted";
+export type TorDraft = {
+  content: string;
+  status: TorDraftStatus;
+  updated_at: string;
+};
+const EMPTY_DRAFT: TorDraft = { content: "", status: "drafting", updated_at: "" };
+const DRAFT_STATUS: Array<{ value: TorDraftStatus; label: string; cls: string }> = [
+  { value: "drafting", label: "กำลังร่าง", cls: "border-amber-500/40 bg-amber-50 text-amber-700" },
+  { value: "done", label: "ร่างเสร็จ", cls: "border-emerald-500/40 bg-emerald-50 text-emerald-700" },
+  { value: "submitted", label: "ส่งแล้ว", cls: "border-blue-500/40 bg-blue-50 text-blue-700" },
+];
+function draftStatusLabel(s: TorDraftStatus): string {
+  return DRAFT_STATUS.find((o) => o.value === s)?.label ?? "กำลังร่าง";
+}
+
 const PRIORITY_OPTIONS: Array<{ value: Priority; label: string; color: string }> = [
   { value: "urgent", label: "🔥 Urgent", color: "#dc2626" },
   { value: "high", label: "↑ High", color: "#ff5008" },
@@ -169,6 +190,10 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
     {},
   );
   const [metaMap, setMetaMap] = useSyncedState<Record<string, ProjectMeta>>(META_KEY, {});
+  const [draftMap, setDraftMap] = useSyncedState<Record<string, TorDraft>>(
+    TOR_DRAFT_KEY,
+    {},
+  );
   // File attachments stay local-only: base64 in a shared JSONB column would
   // explode the table size and isn't useful until we wire Supabase Storage.
   const [attachMap, setAttachMap] = useLocalStorage<Record<string, TorAttachment[]>>(
@@ -312,6 +337,9 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
     fn: (prev: TorAttachment[]) => TorAttachment[],
   ) => {
     setAttachMap((prev) => ({ ...prev, [pid]: fn(prev[pid] ?? []) }));
+  };
+  const updateDraft = (pid: string, fn: (prev: TorDraft) => TorDraft) => {
+    setDraftMap((prev) => ({ ...prev, [pid]: fn(prev[pid] ?? EMPTY_DRAFT) }));
   };
 
   if (!hydrated) {
@@ -499,11 +527,13 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
             confirm={confirmMap[p.master_project_id] ?? { confirmed: false, notes: "" }}
             meta={metaMap[p.master_project_id] ?? { priority: "", start_q: "" }}
             attachments={attachMap[p.master_project_id] ?? []}
+            draft={draftMap[p.master_project_id] ?? EMPTY_DRAFT}
             onUpdateTor={(fn) => updateTor(p.master_project_id, fn)}
             onUpdateSow={(fn) => updateSow(p.master_project_id, fn)}
             onSetConfirm={(fn) => setConfirm(p.master_project_id, fn)}
             onSetMeta={(fn) => setMeta(p.master_project_id, fn)}
             onUpdateAttach={(fn) => updateAttach(p.master_project_id, fn)}
+            onUpdateDraft={(fn) => updateDraft(p.master_project_id, fn)}
             initiallyOpen={i < 2}
           />
         ))}
@@ -519,11 +549,13 @@ function ProjectCard({
   confirm,
   meta,
   attachments,
+  draft,
   onUpdateTor,
   onUpdateSow,
   onSetConfirm,
   onSetMeta,
   onUpdateAttach,
+  onUpdateDraft,
   initiallyOpen,
 }: {
   project: ProjectRecord;
@@ -532,11 +564,13 @@ function ProjectCard({
   confirm: ConfirmRecord;
   meta: ProjectMeta;
   attachments: TorAttachment[];
+  draft: TorDraft;
   onUpdateTor: (fn: (prev: TorRef[]) => TorRef[]) => void;
   onUpdateSow: (fn: (prev: string[]) => string[]) => void;
   onSetConfirm: (fn: (prev: ConfirmRecord) => ConfirmRecord) => void;
   onSetMeta: (fn: (prev: ProjectMeta) => ProjectMeta) => void;
   onUpdateAttach: (fn: (prev: TorAttachment[]) => TorAttachment[]) => void;
+  onUpdateDraft: (fn: (prev: TorDraft) => TorDraft) => void;
   initiallyOpen: boolean;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
@@ -591,6 +625,12 @@ function ProjectCard({
               </Badge>
             )}
             {sow.length > 0 && <Badge variant="muted">{sow.length} SOW</Badge>}
+            {draft.content.trim() && (
+              <Badge variant="muted">
+                <ClipboardEdit className="mr-0.5 h-2.5 w-2.5" />
+                ร่าง TOR: {draftStatusLabel(draft.status)}
+              </Badge>
+            )}
           </div>
           <div className="mt-1 font-bold leading-snug">{project.project_name_th}</div>
           <div className="mt-1 truncate text-[13px] text-[color:var(--color-muted-fg)]">
@@ -624,14 +664,17 @@ function ProjectCard({
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="grid gap-5 border-t border-[color:var(--color-border)] p-5 md:grid-cols-2">
-              <TorRefList
-                items={tor}
-                attachments={attachments}
-                onUpdate={onUpdateTor}
-                onUpdateAttach={onUpdateAttach}
-              />
-              <SowList items={sow} onUpdate={onUpdateSow} />
+            <div className="space-y-5 border-t border-[color:var(--color-border)] p-5">
+              <TorDraftEditor draft={draft} onUpdate={onUpdateDraft} />
+              <div className="grid gap-5 md:grid-cols-2">
+                <TorRefList
+                  items={tor}
+                  attachments={attachments}
+                  onUpdate={onUpdateTor}
+                  onUpdateAttach={onUpdateAttach}
+                />
+                <SowList items={sow} onUpdate={onUpdateSow} />
+              </div>
             </div>
           </motion.div>
         )}
@@ -640,6 +683,59 @@ function ProjectCard({
       {/* Confirm strip — ALWAYS visible, OUTSIDE expand/collapse */}
       <ConfirmStrip confirm={confirm} onSet={onSetConfirm} />
     </Card>
+  );
+}
+
+function TorDraftEditor({
+  draft,
+  onUpdate,
+}: {
+  draft: TorDraft;
+  onUpdate: (fn: (prev: TorDraft) => TorDraft) => void;
+}) {
+  const setContent = (content: string) =>
+    onUpdate((prev) => ({ ...prev, content, updated_at: new Date().toISOString() }));
+  const setStatus = (status: TorDraftStatus) =>
+    onUpdate((prev) => ({ ...prev, status, updated_at: new Date().toISOString() }));
+  const chars = draft.content.trim().length;
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <ClipboardEdit className="h-4 w-4 text-metier-orange" />
+        <h3 className="font-bold">ร่าง TOR (ของเรา)</h3>
+        <div className="ml-auto flex gap-1">
+          {DRAFT_STATUS.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => setStatus(s.value)}
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors",
+                draft.status === s.value
+                  ? s.cls
+                  : "border-[color:var(--color-border)] text-[color:var(--color-muted)] hover:text-fg",
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <Textarea
+        value={draft.content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="พิมพ์หรือวางเนื้อหาร่าง TOR ที่ทีมเราเขียนเอง ที่นี่ — บันทึกอัตโนมัติ และทีมเห็นเหมือนกัน"
+        className="min-h-[220px] text-[13px] leading-relaxed"
+      />
+      <div className="mt-1 flex items-center justify-between text-[10.5px] text-[color:var(--color-muted)]">
+        <span>{chars.toLocaleString("th-TH")} ตัวอักษร · บันทึกอัตโนมัติ</span>
+        {draft.updated_at && (
+          <span>
+            แก้ล่าสุด {draft.updated_at.slice(0, 10)} {draft.updated_at.slice(11, 16)}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1009,8 +1105,13 @@ function TorRefItem({
             <div className="font-mono text-[11px] text-metier-orange">{tor.code}</div>
           )}
           {tor.note && (
-            <div className={cn("mt-0.5 leading-snug", u === "not_usable" && "line-through")}>
-              {tor.note}
+            <div
+              className={cn(
+                "mt-0.5 whitespace-pre-wrap leading-snug",
+                u === "not_usable" && "line-through",
+              )}
+            >
+              <Linkify text={tor.note} />
             </div>
           )}
           <button
@@ -1067,7 +1168,9 @@ function TorRefItem({
                             {c.created_at.slice(0, 10)} {c.created_at.slice(11, 16)}
                           </span>
                         </div>
-                        <div className="mt-0.5 whitespace-pre-wrap leading-snug">{c.body}</div>
+                        <div className="mt-0.5 whitespace-pre-wrap leading-snug">
+                          <Linkify text={c.body} />
+                        </div>
                         <button
                           onClick={() => onRemoveComment(c.id)}
                           className="invisible mt-0.5 inline-flex items-center gap-1 text-[10px] text-[color:var(--color-muted)] hover:text-red-600 group-hover/c:visible"
@@ -1392,4 +1495,31 @@ function formatBytes(b: number): string {
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// Render free text but turn http(s) URLs (e.g. pasted Google Drive / SharePoint
+// links to a TOR draft) into clickable links that open in a new tab.
+const URL_SPLIT_RE = /(https?:\/\/[^\s]+)/g;
+const IS_URL_RE = /^https?:\/\//;
+function Linkify({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(URL_SPLIT_RE).map((part, i) =>
+        IS_URL_RE.test(part) ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-0.5 break-all text-metier-orange underline decoration-metier-orange/40 underline-offset-2 hover:decoration-metier-orange"
+          >
+            {part}
+            <ExternalLink className="h-3 w-3 shrink-0" />
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  );
 }

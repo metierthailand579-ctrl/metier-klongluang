@@ -7,7 +7,7 @@ End-to-end deploy checklist สำหรับขึ้น GitHub + Vercel + Sup
 ## 1. Push to GitHub (ครั้งแรกเท่านั้น)
 
 ```bash
-cd /Users/ddoyle/Downloads/คลองหลวง_2026/web
+cd <repo>/web
 git push -u origin main
 ```
 
@@ -83,7 +83,9 @@ git push
 
 Schema migration ใหม่ → เพิ่มไฟล์ใน `supabase/migrations/0002_*.sql` → run ใน Dashboard / MCP
 
-Seed update → เปลี่ยน `output/extraction/ALL_records_v2.json` แล้ว `npm run seed:projects` ใหม่
+Data update → เปลี่ยน extraction ต้นทางแล้วรัน `npm run data:build` (สร้าง `data/*.json` ใหม่ ซึ่งแอปอ่านจริง) — `seed:*` เป็น legacy push ขึ้นตาราง Supabase เดิมที่แอปไม่ได้อ่านแล้ว
+
+> หมายเหตุ: ตอนนี้แอปอ่านข้อมูลโครงการจาก `data/*.json` ในเครื่อง และใช้ Supabase แค่ตาราง `app_state` (shared state + realtime) ดู README ส่วน "Data architecture"
 
 ---
 
