@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Paperclip,
   Plus,
+  RotateCw,
   Search,
   Send,
   Trash2,
@@ -36,7 +37,14 @@ import {
 } from "@/components/ui/select";
 import { KpiCard } from "@/components/kpi-card";
 import { YearBudgetStrip } from "@/components/year-budget-strip";
-import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
+import {
+  cn,
+  formatBaht,
+  formatBahtCompact,
+  formatIctIsoDate,
+  formatThaiDateOnly,
+  formatThaiTimestamp,
+} from "@/lib/utils";
 import { useLocalStorage } from "@/lib/storage";
 import { useSyncedState } from "@/lib/shared-state";
 import type { ProjectRecord } from "@/types/db";
@@ -105,6 +113,7 @@ export type TorComment = {
 };
 
 export type TorRef = {
+  id?: string; // stable React key; backfilled for legacy rows saved before this field
   code: string;
   note: string;
   usable?: TorUsability; // undefined === "pending" (back-compat for existing rows)
@@ -140,7 +149,13 @@ export type TorAttachment = {
 // The actual TOR the team drafts themselves (work product), stored inline as
 // text and synced so everyone sees the same draft. Distinct from TorRef, which
 // only points at existing/historical TOR documents.
-export type TorDraftStatus = "drafting" | "done" | "submitted";
+export type TorDraftStatus =
+  | "drafting"
+  | "done"
+  | "review_pending"
+  | "reviewed"
+  | "revised"
+  | "submitted";
 export type TorDraft = {
   content: string;
   status: TorDraftStatus;
@@ -148,12 +163,18 @@ export type TorDraft = {
 };
 const EMPTY_DRAFT: TorDraft = { content: "", status: "drafting", updated_at: "" };
 const DRAFT_STATUS: Array<{ value: TorDraftStatus; label: string; cls: string }> = [
-  { value: "drafting", label: "กำลังร่าง", cls: "border-amber-500/40 bg-amber-50 text-amber-700" },
-  { value: "done", label: "ร่างเสร็จ", cls: "border-emerald-500/40 bg-emerald-50 text-emerald-700" },
-  { value: "submitted", label: "ส่งแล้ว", cls: "border-blue-500/40 bg-blue-50 text-blue-700" },
+  { value: "drafting", label: "กำลังร่าง", cls: "border-slate-400/50 bg-slate-50 text-slate-600" },
+  { value: "done", label: "ร่างเสร็จ", cls: "border-sky-500/40 bg-sky-50 text-sky-700" },
+  { value: "review_pending", label: "รอตรวจ", cls: "border-amber-500/40 bg-amber-50 text-amber-700" },
+  { value: "reviewed", label: "ตรวจแล้ว", cls: "border-violet-500/40 bg-violet-50 text-violet-700" },
+  { value: "revised", label: "ตรวจแล้วผ่านแก้", cls: "border-teal-500/40 bg-teal-50 text-teal-700" },
+  { value: "submitted", label: "ส่งแล้ว", cls: "border-emerald-500/40 bg-emerald-50 text-emerald-700" },
 ];
 function draftStatusLabel(s: TorDraftStatus): string {
   return DRAFT_STATUS.find((o) => o.value === s)?.label ?? "กำลังร่าง";
+}
+function draftStatusClass(s: TorDraftStatus): string {
+  return DRAFT_STATUS.find((o) => o.value === s)?.cls ?? DRAFT_STATUS[0].cls;
 }
 
 const PRIORITY_OPTIONS: Array<{ value: Priority; label: string; color: string }> = [
@@ -179,6 +200,51 @@ export function priorityColor(p: Priority): string {
 }
 export function priorityLabel(p: Priority): string {
   return PRIORITY_OPTIONS.find((o) => o.value === p)?.label ?? "— ไม่ตั้ง";
+}
+
+// Local-first text editing for fields that sync to shared state. Keeps the
+// textarea instant while pushing to Supabase only after the user pauses (so
+// fast typing doesn't spam Realtime or fight a teammate's caret). A remote
+// value is adopted only when the user isn't mid-edit; any pending edit is
+// flushed on unmount so collapsing a card or navigating away never drops it.
+function useDebouncedSync<T>(
+  remote: T,
+  commit: (value: T) => void,
+  delay = 500,
+): [T, (value: T) => void] {
+  const [local, setLocal] = useState<T>(remote);
+  const editingRef = useRef(false);
+  const pendingRef = useRef<T>(remote);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+
+  useEffect(() => {
+    if (!editingRef.current) setLocal(remote);
+  }, [remote]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (editingRef.current) commitRef.current(pendingRef.current);
+    };
+  }, []);
+
+  const onChange = (value: T) => {
+    setLocal(value);
+    pendingRef.current = value;
+    editingRef.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      editingRef.current = false;
+      commitRef.current(value);
+    }, delay);
+  };
+
+  return [local, onChange];
 }
 
 export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
@@ -208,6 +274,12 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
   const [priorityFilter, setPriorityFilter] = useState<Set<Priority>>(new Set());
   const [mainGroupFilter, setMainGroupFilter] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("priority");
+  // Per-card expand state (undefined === fall back to default: first 2 open).
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
+  const [attachNoticeDismissed, setAttachNoticeDismissed] = useLocalStorage<boolean>(
+    "khlongluang.attachNoticeDismissed.v1",
+    false,
+  );
 
   const allItems = useMemo(() => {
     const set = new Set(selectedIds);
@@ -313,6 +385,8 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
     setPriorityFilter(new Set());
     setMainGroupFilter(new Set());
   };
+  const setAllOpen = (value: boolean) =>
+    setOpenMap(Object.fromEntries(items.map((p) => [p.master_project_id, value])));
 
   const updateTor = (pid: string, fn: (prev: TorRef[]) => TorRef[]) => {
     setTorMap((prev) => ({ ...prev, [pid]: fn(prev[pid] ?? []) }));
@@ -400,11 +474,23 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
 
       <YearBudgetStrip projects={allItems} title="งบประมาณตามปี (โครงการที่เลือก)" />
 
-      <div className="rounded-md border border-dashed border-amber-500/40 bg-amber-50 px-4 py-2 text-[12px] text-amber-900">
-        <AlertTriangle className="mr-1 inline h-3.5 w-3.5 -translate-y-px" />
-        ไฟล์แนบเก็บใน browser ของคุณเอง (limit 2MB/ไฟล์) — เมื่อต่อ Supabase Storage แล้ว
-        จะอัปโหลดจริงและ share ข้ามอุปกรณ์ได้
-      </div>
+      {!attachNoticeDismissed && (
+        <div className="flex items-start gap-2 rounded-md border border-dashed border-amber-500/40 bg-amber-50 px-4 py-2 text-[12px] text-amber-900">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1">
+            ไฟล์แนบเก็บใน browser ของคุณเอง (limit 2MB/ไฟล์) — เมื่อต่อ Supabase Storage แล้ว
+            จะอัปโหลดจริงและ share ข้ามอุปกรณ์ได้
+          </span>
+          <button
+            onClick={() => setAttachNoticeDismissed(true)}
+            className="shrink-0 rounded p-0.5 text-amber-700 hover:bg-amber-100"
+            title="ปิดข้อความนี้"
+            aria-label="ปิดข้อความแจ้งเตือนไฟล์แนบ"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Sort + Filter toolbar */}
       <Card>
@@ -504,10 +590,22 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
             ))}
           </div>
 
-          <div className="border-t border-[color:var(--color-border)] pt-2 text-[12px] text-[color:var(--color-muted-fg)]">
-            แสดง{" "}
-            <span className="font-bold text-fg">{items.length.toLocaleString("th-TH")}</span>{" "}
-            จาก {allItems.length.toLocaleString("th-TH")} โครงการที่เลือก
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--color-border)] pt-2 text-[12px] text-[color:var(--color-muted-fg)]">
+            <span>
+              แสดง{" "}
+              <span className="font-bold text-fg">{items.length.toLocaleString("th-TH")}</span>{" "}
+              จาก {allItems.length.toLocaleString("th-TH")} โครงการที่เลือก
+            </span>
+            {items.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={() => setAllOpen(true)}>
+                  <ChevronDown className="h-3.5 w-3.5" /> กางทั้งหมด
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setAllOpen(false)}>
+                  <ChevronUp className="h-3.5 w-3.5" /> พับทั้งหมด
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -518,25 +616,31 @@ export function SelectedExplorer({ projects }: { projects: ProjectRecord[] }) {
             ไม่มีโครงการตรงเงื่อนไข — ล้างฟิลเตอร์เพื่อดูทั้งหมด
           </div>
         )}
-        {items.map((p, i) => (
-          <ProjectCard
-            key={p.master_project_id}
-            project={p}
-            tor={torMap[p.master_project_id] ?? []}
-            sow={sowMap[p.master_project_id] ?? []}
-            confirm={confirmMap[p.master_project_id] ?? { confirmed: false, notes: "" }}
-            meta={metaMap[p.master_project_id] ?? { priority: "", start_q: "" }}
-            attachments={attachMap[p.master_project_id] ?? []}
-            draft={draftMap[p.master_project_id] ?? EMPTY_DRAFT}
-            onUpdateTor={(fn) => updateTor(p.master_project_id, fn)}
-            onUpdateSow={(fn) => updateSow(p.master_project_id, fn)}
-            onSetConfirm={(fn) => setConfirm(p.master_project_id, fn)}
-            onSetMeta={(fn) => setMeta(p.master_project_id, fn)}
-            onUpdateAttach={(fn) => updateAttach(p.master_project_id, fn)}
-            onUpdateDraft={(fn) => updateDraft(p.master_project_id, fn)}
-            initiallyOpen={i < 2}
-          />
-        ))}
+        {items.map((p, i) => {
+          const isOpen = openMap[p.master_project_id] ?? i < 2;
+          return (
+            <ProjectCard
+              key={p.master_project_id}
+              project={p}
+              tor={torMap[p.master_project_id] ?? []}
+              sow={sowMap[p.master_project_id] ?? []}
+              confirm={confirmMap[p.master_project_id] ?? { confirmed: false, notes: "" }}
+              meta={metaMap[p.master_project_id] ?? { priority: "", start_q: "" }}
+              attachments={attachMap[p.master_project_id] ?? []}
+              draft={draftMap[p.master_project_id] ?? EMPTY_DRAFT}
+              onUpdateTor={(fn) => updateTor(p.master_project_id, fn)}
+              onUpdateSow={(fn) => updateSow(p.master_project_id, fn)}
+              onSetConfirm={(fn) => setConfirm(p.master_project_id, fn)}
+              onSetMeta={(fn) => setMeta(p.master_project_id, fn)}
+              onUpdateAttach={(fn) => updateAttach(p.master_project_id, fn)}
+              onUpdateDraft={(fn) => updateDraft(p.master_project_id, fn)}
+              open={isOpen}
+              onToggle={() =>
+                setOpenMap((m) => ({ ...m, [p.master_project_id]: !isOpen }))
+              }
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -556,7 +660,8 @@ function ProjectCard({
   onSetMeta,
   onUpdateAttach,
   onUpdateDraft,
-  initiallyOpen,
+  open,
+  onToggle,
 }: {
   project: ProjectRecord;
   tor: TorRef[];
@@ -571,9 +676,9 @@ function ProjectCard({
   onSetMeta: (fn: (prev: ProjectMeta) => ProjectMeta) => void;
   onUpdateAttach: (fn: (prev: TorAttachment[]) => TorAttachment[]) => void;
   onUpdateDraft: (fn: (prev: TorDraft) => TorDraft) => void;
-  initiallyOpen: boolean;
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const [open, setOpen] = useState(initiallyOpen);
   const pColor = priorityColor(meta.priority);
 
   return (
@@ -583,19 +688,21 @@ function ProjectCard({
         confirm.confirmed && "border-emerald-500/40 bg-emerald-500/[0.02]",
       )}
     >
-      {/* Header — always visible, click to expand/collapse */}
+      {/* Header — always visible, click to expand/collapse. On narrow screens it
+          wraps so the budget block drops to its own full-width line instead of
+          squeezing the title/badges into a cramped left column. */}
       <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-start gap-3 p-5 text-left"
+        onClick={onToggle}
+        className="flex w-full flex-wrap items-start gap-x-3 gap-y-2 p-5 text-left sm:flex-nowrap"
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-subtle)]">
+        <div className="order-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-subtle)]">
           {confirm.confirmed ? (
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
           ) : (
             <FileText className="h-5 w-5 text-[color:var(--color-muted-fg)]" />
           )}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="order-2 min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[12px] text-[color:var(--color-muted)]">
               {project.master_project_id}
@@ -626,7 +733,10 @@ function ProjectCard({
             )}
             {sow.length > 0 && <Badge variant="muted">{sow.length} SOW</Badge>}
             {draft.content.trim() && (
-              <Badge variant="muted">
+              <Badge
+                variant="outline"
+                className={cn("font-semibold", draftStatusClass(draft.status))}
+              >
                 <ClipboardEdit className="mr-0.5 h-2.5 w-2.5" />
                 ร่าง TOR: {draftStatusLabel(draft.status)}
               </Badge>
@@ -638,14 +748,14 @@ function ProjectCard({
             {project.first_planned_year || "—"}
           </div>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="order-4 w-full text-right sm:order-3 sm:w-auto sm:shrink-0">
           <div className="text-[18px] font-bold tabular-nums">
             {formatBaht(project.total_budget)}
           </div>
           <div className="mt-0.5 text-[11px] text-[color:var(--color-muted)]">บาท · รวม</div>
           <BudgetByYear project={project} />
         </div>
-        <div className="shrink-0 self-center">
+        <div className="order-3 shrink-0 self-center sm:order-4">
           {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </div>
       </button>
@@ -680,8 +790,10 @@ function ProjectCard({
         )}
       </AnimatePresence>
 
-      {/* Confirm strip — ALWAYS visible, OUTSIDE expand/collapse */}
-      <ConfirmStrip confirm={confirm} onSet={onSetConfirm} />
+      {/* Confirm strip — ALWAYS visible, OUTSIDE expand/collapse. When the card
+          is collapsed it shrinks to a compact bar (button + note preview) so a
+          long list stays scannable, but the confirm action never disappears. */}
+      <ConfirmStrip confirm={confirm} onSet={onSetConfirm} open={open} />
     </Card>
   );
 }
@@ -693,18 +805,19 @@ function TorDraftEditor({
   draft: TorDraft;
   onUpdate: (fn: (prev: TorDraft) => TorDraft) => void;
 }) {
-  const setContent = (content: string) =>
-    onUpdate((prev) => ({ ...prev, content, updated_at: new Date().toISOString() }));
+  const [content, setContent] = useDebouncedSync(draft.content, (value) =>
+    onUpdate((prev) => ({ ...prev, content: value, updated_at: new Date().toISOString() })),
+  );
   const setStatus = (status: TorDraftStatus) =>
     onUpdate((prev) => ({ ...prev, status, updated_at: new Date().toISOString() }));
-  const chars = draft.content.trim().length;
+  const chars = content.trim().length;
 
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <ClipboardEdit className="h-4 w-4 text-metier-orange" />
         <h3 className="font-bold">ร่าง TOR (ของเรา)</h3>
-        <div className="ml-auto flex gap-1">
+        <div className="ml-auto flex flex-wrap justify-end gap-1">
           {DRAFT_STATUS.map((s) => (
             <button
               key={s.value}
@@ -722,18 +835,14 @@ function TorDraftEditor({
         </div>
       </div>
       <Textarea
-        value={draft.content}
+        value={content}
         onChange={(e) => setContent(e.target.value)}
         placeholder="พิมพ์หรือวางเนื้อหาร่าง TOR ที่ทีมเราเขียนเอง ที่นี่ — บันทึกอัตโนมัติ และทีมเห็นเหมือนกัน"
-        className="min-h-[220px] text-[13px] leading-relaxed"
+        className="min-h-[120px] text-[13px] leading-relaxed"
       />
       <div className="mt-1 flex items-center justify-between text-[10.5px] text-[color:var(--color-muted)]">
         <span>{chars.toLocaleString("th-TH")} ตัวอักษร · บันทึกอัตโนมัติ</span>
-        {draft.updated_at && (
-          <span>
-            แก้ล่าสุด {draft.updated_at.slice(0, 10)} {draft.updated_at.slice(11, 16)}
-          </span>
-        )}
+        {draft.updated_at && <span>แก้ล่าสุด {formatThaiTimestamp(draft.updated_at)}</span>}
       </div>
     </div>
   );
@@ -832,11 +941,19 @@ function TorRefList({
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Backfill stable ids onto legacy rows once, so each item's comment thread
+  // stays attached to the right ref when an earlier ref is deleted.
+  useEffect(() => {
+    if (items.some((t) => !t.id)) {
+      onUpdate((prev) => prev.map((t) => (t.id ? t : { ...t, id: makeId() })));
+    }
+  }, [items, onUpdate]);
+
   const add = () => {
     if (!code.trim() && !note.trim()) return;
     onUpdate((prev) => [
       ...prev,
-      { code: code.trim(), note: note.trim(), usable: "pending" as const },
+      { id: makeId(), code: code.trim(), note: note.trim(), usable: "pending" as const },
     ]);
     setCode("");
     setNote("");
@@ -955,7 +1072,7 @@ function TorRefList({
         <ul className="space-y-2">
           {items.map((t, i) => (
             <TorRefItem
-              key={i}
+              key={t.id ?? i}
               tor={t}
               onCycleUsable={() => cycleUsable(i)}
               onRemove={() => remove(i)}
@@ -990,6 +1107,7 @@ function TorRefList({
                   download={a.name}
                   className="rounded p-1 text-[color:var(--color-muted)] hover:bg-[color:var(--color-subtle)] hover:text-fg"
                   title="ดาวน์โหลด"
+                  aria-label={`ดาวน์โหลดไฟล์ ${a.name}`}
                 >
                   <Download className="h-3.5 w-3.5" />
                 </a>
@@ -997,6 +1115,7 @@ function TorRefList({
                   onClick={() => removeAttachment(a.id)}
                   className="invisible rounded p-1 text-[color:var(--color-muted)] hover:bg-[color:var(--color-subtle)] hover:text-fg group-hover:visible"
                   title="ลบไฟล์"
+                  aria-label={`ลบไฟล์ ${a.name}`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -1126,17 +1245,20 @@ function TorRefItem({
         <button
           onClick={onCycleUsable}
           className={cn(
-            "shrink-0 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors",
+            "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors",
             usableStyles,
           )}
           title="คลิกเพื่อเปลี่ยน: รอตรวจ → ใช้ได้ → ใช้ไม่ได้"
+          aria-label={`สถานะ TOR: ${usableLabel} — คลิกเพื่อเปลี่ยนสถานะ`}
         >
+          <RotateCw className="h-2.5 w-2.5 opacity-60" />
           {usableLabel}
         </button>
         <button
           onClick={onRemove}
           className="invisible shrink-0 rounded p-0.5 text-[color:var(--color-muted)] hover:bg-[color:var(--color-subtle)] hover:text-fg group-hover:visible"
           title="ลบ"
+          aria-label="ลบ TOR อ้างอิงนี้"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -1165,7 +1287,7 @@ function TorRefItem({
                         <div className="flex items-baseline justify-between gap-2 text-[10.5px] text-[color:var(--color-muted-fg)]">
                           <span className="font-bold text-fg">{c.author}</span>
                           <span className="tabular-nums">
-                            {c.created_at.slice(0, 10)} {c.created_at.slice(11, 16)}
+                            {formatThaiTimestamp(c.created_at)}
                           </span>
                         </div>
                         <div className="mt-0.5 whitespace-pre-wrap leading-snug">
@@ -1197,7 +1319,12 @@ function TorRefItem({
                   placeholder="comment เกี่ยวกับ TOR นี้ (⌘/Ctrl+Enter ส่ง)"
                   className="min-h-[40px] flex-1 text-[12px]"
                 />
-                <Button size="sm" onClick={submit} disabled={!body.trim()}>
+                <Button
+                  size="sm"
+                  onClick={submit}
+                  disabled={!body.trim()}
+                  aria-label="ส่ง comment"
+                >
                   <Send className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -1251,6 +1378,7 @@ function SowList({
                 onClick={() => remove(i)}
                 className="invisible shrink-0 rounded p-0.5 text-[color:var(--color-muted)] hover:bg-[color:var(--color-subtle)] hover:text-fg group-hover:visible"
                 title="ลบ"
+                aria-label="ลบ SOW item นี้"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -1280,10 +1408,58 @@ function SowList({
 function ConfirmStrip({
   confirm,
   onSet,
+  open,
 }: {
   confirm: ConfirmRecord;
   onSet: (fn: (prev: ConfirmRecord) => ConfirmRecord) => void;
+  open: boolean;
 }) {
+  const [notes, setNotes] = useDebouncedSync(confirm.notes, (value) =>
+    onSet((prev) => ({ ...prev, notes: value })),
+  );
+  const doConfirm = () =>
+    onSet((prev) => ({ ...prev, confirmed: true, confirmed_at: new Date().toISOString() }));
+  const undoConfirm = () =>
+    onSet((prev) => ({ ...prev, confirmed: false, confirmed_at: undefined }));
+
+  // Collapsed: a single compact row — note preview + the confirm action stay
+  // visible, but the editable textarea is tucked away to keep the list short.
+  if (!open) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-3 border-t border-[color:var(--color-border)] px-5 py-2.5 transition-colors",
+          confirm.confirmed && "bg-emerald-500/[0.04]",
+        )}
+      >
+        <div className="min-w-0 flex-1 text-[12px] text-[color:var(--color-muted-fg)]">
+          {notes.trim() ? (
+            <span className="line-clamp-1">
+              <span className="font-medium text-[color:var(--color-muted)]">หมายเหตุ: </span>
+              {notes}
+            </span>
+          ) : (
+            <span className="text-[color:var(--color-muted)]">ยังไม่มีหมายเหตุ — กางการ์ดเพื่อเพิ่ม</span>
+          )}
+        </div>
+        {confirm.confirmed ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant="success">
+              ยืนยันแล้ว · {formatThaiDateOnly(confirm.confirmed_at)}
+            </Badge>
+            <Button variant="outline" size="sm" onClick={undoConfirm}>
+              <X className="h-3.5 w-3.5" /> ยกเลิก
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" className="shrink-0" onClick={doConfirm}>
+            <CheckCircle2 className="h-4 w-4" /> เทศบาลยืนยัน
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -1297,8 +1473,8 @@ function ConfirmStrip({
             หมายเหตุจากเทศบาล / ทีม Metier
           </label>
           <Textarea
-            value={confirm.notes}
-            onChange={(e) => onSet((prev) => ({ ...prev, notes: e.target.value }))}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
             placeholder="เช่น 'ตกลงในหลักการ ขอเพิ่ม training 2 รอบ' / 'รอเอกสารยืนยันงบ'"
             className="min-h-[60px]"
           />
@@ -1306,30 +1482,15 @@ function ConfirmStrip({
         <div className="flex flex-col items-stretch justify-end gap-2 md:w-[200px]">
           {confirm.confirmed ? (
             <>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() =>
-                  onSet((prev) => ({ ...prev, confirmed: false, confirmed_at: undefined }))
-                }
-              >
+              <Button variant="outline" size="lg" onClick={undoConfirm}>
                 <X className="h-4 w-4" /> ยกเลิกยืนยัน
               </Button>
               <div className="text-center text-[11px] text-[color:var(--color-muted)]">
-                ยืนยันเมื่อ {confirm.confirmed_at?.slice(0, 10) || "—"}
+                ยืนยันเมื่อ {formatThaiDateOnly(confirm.confirmed_at)}
               </div>
             </>
           ) : (
-            <Button
-              size="lg"
-              onClick={() =>
-                onSet((prev) => ({
-                  ...prev,
-                  confirmed: true,
-                  confirmed_at: new Date().toISOString(),
-                }))
-              }
-            >
+            <Button size="lg" onClick={doConfirm}>
               <CheckCircle2 className="h-4 w-4" /> เทศบาลยืนยัน
             </Button>
           )}
@@ -1450,7 +1611,7 @@ function exportSelectedToCsv(
       m?.priority ?? "",
       m?.start_q ?? "",
       c?.confirmed ? "TRUE" : "FALSE",
-      c?.confirmed_at?.slice(0, 10) ?? "",
+      formatIctIsoDate(c?.confirmed_at),
       tor.map((t) => `${t.code}: ${t.note}`).join(" | "),
       sow.join(" | "),
       c?.notes ?? "",
@@ -1473,7 +1634,7 @@ function exportSelectedToCsv(
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatIctIsoDate(new Date().toISOString());
   a.href = url;
   a.download = `klongluang-selected-${today}.csv`;
   document.body.appendChild(a);
@@ -1489,6 +1650,10 @@ function readAsDataURL(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+function makeId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function formatBytes(b: number): string {

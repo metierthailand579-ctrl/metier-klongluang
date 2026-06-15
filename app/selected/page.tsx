@@ -15,8 +15,8 @@ export default function SelectedPage() {
         <div>
           <h1 className="text-[32px] font-bold leading-tight">โครงการที่เลือก · TOR + SOW</h1>
           <p className="mt-2 max-w-3xl font-light text-[color:var(--color-muted-fg)]">
-            แต่ละโครงการที่เลือกในหน้า 5 — Admin เพิ่ม{" "}
-            <strong>TOR อ้างอิง</strong> และ <strong>SOW</strong> เองในแต่ละ card
+            แต่ละโครงการที่เลือกในหน้า 5 — ทีม Metier <strong>ร่าง TOR ของเราเอง</strong>,
+            แนบ <strong>TOR อ้างอิง</strong> และใส่ <strong>SOW</strong> ในแต่ละ card
             แล้วให้ฝั่งเทศบาลคลองหลวงกด <strong>Confirm</strong>
           </p>
         </div>

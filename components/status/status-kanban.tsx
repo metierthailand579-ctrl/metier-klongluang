@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { KpiCard } from "@/components/kpi-card";
-import { cn, formatBaht, formatBahtCompact } from "@/lib/utils";
+import { cn, formatBaht, formatBahtCompact, formatThaiTimestamp } from "@/lib/utils";
 import { useLocalStorage } from "@/lib/storage";
 import { useSyncedState } from "@/lib/shared-state";
 import {
@@ -906,7 +906,7 @@ function DetailDrawer({
                   <span className="font-medium">{h.status}</span>
                 </div>
                 <span className="text-[11px] text-[color:var(--color-muted)] tabular-nums">
-                  {h.changed_at.slice(0, 10)} {h.changed_at.slice(11, 16)}
+                  {formatThaiTimestamp(h.changed_at)}
                 </span>
               </li>
             ))}
