@@ -940,6 +940,7 @@ function TorRefList({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(true);
 
   // Backfill stable ids onto legacy rows once, so each item's comment thread
   // stays attached to the right ref when an earlier ref is deleted.
@@ -1036,14 +1037,24 @@ function TorRefList({
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <FileText className="h-4 w-4 text-[color:var(--color-muted-fg)]" />
-        <h3 className="font-bold">TOR อ้างอิง</h3>
-        <Badge variant="muted" className="ml-auto">
-          {items.length} ref · {attachments.length} ไฟล์
-        </Badge>
+      <div className="mb-3">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          <FileText className="h-4 w-4 text-[color:var(--color-muted-fg)]" />
+          <h3 className="font-bold">TOR อ้างอิง</h3>
+          <Badge variant="muted" className="ml-auto">
+            {items.length} ref · {attachments.length} ไฟล์
+          </Badge>
+          {open ? (
+            <ChevronUp className="h-4 w-4 shrink-0 text-[color:var(--color-muted)]" />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0 text-[color:var(--color-muted)]" />
+          )}
+        </button>
         {items.length > 0 && (
-          <div className="flex w-full gap-1 text-[10.5px]">
+          <div className="mt-2 flex flex-wrap gap-1 text-[10.5px]">
             {usableCount > 0 && (
               <span className="rounded-full border border-emerald-500/40 bg-emerald-50 px-1.5 py-0.5 text-emerald-700">
                 ✓ ใช้ได้ {usableCount}
@@ -1063,7 +1074,16 @@ function TorRefList({
         )}
       </div>
 
-      {/* TOR refs (text) */}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            {/* TOR refs (text) */}
       {items.length === 0 ? (
         <div className="rounded-md border border-dashed border-[color:var(--color-border)] p-4 text-center text-[12px] text-[color:var(--color-muted)]">
           ยังไม่มี TOR อ้างอิง — เพิ่มจากด้านล่าง
@@ -1170,6 +1190,9 @@ function TorRefList({
           </Button>
         </div>
       </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1344,6 +1367,7 @@ function SowList({
   onUpdate: (fn: (prev: string[]) => string[]) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [open, setOpen] = useState(true);
 
   const add = () => {
     const t = draft.trim();
@@ -1355,12 +1379,29 @@ function SowList({
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="mb-3 flex w-full items-center gap-2 text-left"
+      >
         <ClipboardEdit className="h-4 w-4 text-[color:var(--color-muted-fg)]" />
         <h3 className="font-bold">SOW</h3>
         <Badge variant="muted" className="ml-auto">{items.length} รายการ</Badge>
-      </div>
+        {open ? (
+          <ChevronUp className="h-4 w-4 shrink-0 text-[color:var(--color-muted)]" />
+        ) : (
+          <ChevronDown className="h-4 w-4 shrink-0 text-[color:var(--color-muted)]" />
+        )}
+      </button>
 
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
       {items.length === 0 ? (
         <div className="rounded-md border border-dashed border-[color:var(--color-border)] p-4 text-center text-[12px] text-[color:var(--color-muted)]">
           ยังไม่มี SOW — เพิ่มจากด้านล่าง
@@ -1401,6 +1442,9 @@ function SowList({
           <Plus className="h-3.5 w-3.5" /> เพิ่ม
         </Button>
       </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
