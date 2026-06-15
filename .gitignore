@@ -36,6 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# skills — kept local only, not committed
+# /skill/ = raw 161-skill bundle (~10MB); /.claude/skills/ = curated subset for this project
+/skill/
+/.claude/skills/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
