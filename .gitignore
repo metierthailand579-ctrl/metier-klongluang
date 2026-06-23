@@ -41,6 +41,9 @@ yarn-error.log*
 /skill/
 /.claude/skills/
 
+# impeccable — design tool working dir / session cache; deliverables live in DESIGN.md + PRODUCT.md
+/.impeccable/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

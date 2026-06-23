@@ -633,7 +633,7 @@ function ProjectChip({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       className="group block rounded-md border border-[color:var(--color-border)] bg-white p-2.5 text-[12px] transition-all hover:-translate-y-0.5 hover:shadow-sm"
-      style={pColor ? { borderLeft: `3px solid ${pColor}` } : undefined}
+      style={pColor ? { borderColor: pColor } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

@@ -44,7 +44,9 @@ body {
   background: #ffffff;
   color: var(--foreground);
   font-family: var(--font-sans);
-  font-weight: 300;
+  /* The Weight-400 Floor Rule (DESIGN.md): IBM Plex Sans Thai at 300 is too thin
+     for Thai vowel marks at small sizes; 400 keeps body legible for all ages. */
+  font-weight: 400;
 }
 
 h1, h2, h3, h4, h5, h6 {

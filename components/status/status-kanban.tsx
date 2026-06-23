@@ -647,12 +647,8 @@ function KanbanCard({
         e.dataTransfer.setData("text/plain", project.master_project_id);
         e.dataTransfer.effectAllowed = "move";
       }}
-      className="group rounded-md border bg-white p-2.5 hover:border-metier-orange/40"
-      style={{
-        borderLeft: `3px solid ${stateColor}`,
-        borderColor: "var(--color-border)",
-        borderLeftColor: stateColor,
-      }}
+      className="group rounded-md border border-[color:var(--color-border)] bg-white p-2.5 transition-shadow hover:shadow-sm"
+      style={{ borderColor: stateColor }}
     >
       <div className="flex items-start gap-1.5">
         <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-grab text-[color:var(--color-muted)] group-hover:text-fg" />
